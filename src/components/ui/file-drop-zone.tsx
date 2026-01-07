@@ -1,0 +1,57 @@
+import { useRef } from 'react'
+
+interface FileDropzoneProps {
+    onFileSelect: (file: File) => void
+    accept?: string
+    disabled?: boolean
+}
+
+export function FileDropzone({
+    onFileSelect,
+    accept = 'image/jpeg,image/png',
+    disabled = false,
+}: FileDropzoneProps) {
+    const fileInputRef = useRef<HTMLInputElement>(null)
+
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault()
+        if (disabled) return
+        const files = e.dataTransfer.files
+        if (files.length > 0) {
+            onFileSelect(files[0])
+        }
+    }
+
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault()
+    }
+
+    return (
+        <div
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onClick={() => !disabled && fileInputRef.current?.click()}
+            className="border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-lg p-12 text-center cursor-pointer hover:border-zinc-400 dark:hover:border-zinc-600"
+        >
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept={accept}
+                onChange={(e) =>
+                    e.target.files?.[0] && onFileSelect(e.target.files[0])
+                }
+                className="hidden"
+                disabled={disabled}
+            />
+            <div className="space-y-2">
+                <div className="text-4xl">📁</div>
+                <p className="text-lg font-medium">
+                    Drop an image here or click to select
+                </p>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                    Supports JPEG and PNG
+                </p>
+            </div>
+        </div>
+    )
+}
