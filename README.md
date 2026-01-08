@@ -14,7 +14,7 @@ A fast, privacy-focused image compression and resizing tool that runs entirely i
 
 ## Demo
 
-Visit the live demo at [TODO: Add deployment URL]
+Visit the live demo at `https://compress.zytact.com`
 
 Or run it locally:
 
@@ -68,9 +68,6 @@ bun run build
 
 # Preview production build
 bun run preview
-
-# Run tests
-bun run test
 
 # Lint code
 bun run lint
