@@ -55,6 +55,27 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             <body className="flex flex-col min-h-screen">
                 <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
                     <div className="absolute top-2 right-2 z-50 flex flex-col md:flex-row items-center gap-3">
+                        <a
+                            href="https://github.com/zytact/compress"
+                            aria-label="View source on GitHub"
+                            title="View Source Code"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="md:inline-block hidden"
+                        >
+                            {/* Light theme icon */}
+                            <img
+                                src="/GitHub_light.svg"
+                                alt="GitHub"
+                                className="h-6 w-6 block dark:hidden"
+                            />
+                            {/* Dark theme icon */}
+                            <img
+                                src="/GitHub_dark.svg"
+                                alt="GitHub"
+                                className="h-6 w-6 hidden dark:block"
+                            />
+                        </a>
                         <ModeToggle />
                         <a
                             href="https://github.com/zytact/compress"
@@ -62,7 +83,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                             title="View Source Code"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-block"
+                            className="inline-block md:hidden"
                         >
                             {/* Light theme icon */}
                             <img
