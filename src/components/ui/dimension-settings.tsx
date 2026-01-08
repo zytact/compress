@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+
+import { Slider } from './slider';
 import { OutputFormat } from '@/lib/wasm';
 
 interface DimensionsSettingsProps {
@@ -99,14 +101,14 @@ export function DimensionsSettings({
                         onChange={(e) =>
                             handleWidthChange(parseInt(e.target.value) || 0)
                         }
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-zinc-800 ${
+                        className={`w-full px-3 py-2 border rounded-lg bg-background ${
                             widthExceeded
-                                ? 'border-amber-500 ring-1 ring-amber-500'
-                                : 'border-zinc-300 dark:border-zinc-700'
+                                ? 'border-chart-1 ring-1 ring-chart-1'
+                                : 'border-input'
                         }`}
                     />
                     {widthExceeded && (
-                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                        <p className="text-xs text-chart-1 mt-1">
                             Clamped to max: {originalWidth}px
                         </p>
                     )}
@@ -123,14 +125,14 @@ export function DimensionsSettings({
                         onChange={(e) =>
                             handleHeightChange(parseInt(e.target.value) || 0)
                         }
-                        className={`w-full px-3 py-2 border rounded-lg bg-white dark:bg-zinc-800 ${
+                        className={`w-full px-3 py-2 border rounded-lg bg-background ${
                             heightExceeded
-                                ? 'border-amber-500 ring-1 ring-amber-500'
-                                : 'border-zinc-300 dark:border-zinc-700'
+                                ? 'border-chart-1 ring-1 ring-chart-1'
+                                : 'border-input'
                         }`}
                     />
                     {heightExceeded && (
-                        <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                        <p className="text-xs text-chart-1 mt-1">
                             Clamped to max: {originalHeight}px
                         </p>
                     )}
@@ -148,7 +150,7 @@ export function DimensionsSettings({
                             parseInt(e.target.value) as OutputFormat,
                         )
                     }
-                    className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-700 rounded-lg bg-white dark:bg-zinc-800"
+                    className="w-full px-3 py-2 border border-input rounded-lg bg-background"
                 >
                     <option value={OutputFormat.Jpeg}>JPEG</option>
                     <option value={OutputFormat.Png}>PNG</option>
@@ -167,13 +169,13 @@ export function DimensionsSettings({
                         <label className="block text-sm font-medium mb-2">
                             Quality: {quality}%
                         </label>
-                        <input
-                            type="range"
-                            min="1"
-                            max="100"
-                            value={quality}
-                            onChange={(e) =>
-                                onQualityChange(parseInt(e.target.value))
+                        <Slider
+                            min={1}
+                            max={100}
+                            step={1}
+                            value={[quality]}
+                            onValueChange={(values) =>
+                                onQualityChange(values[0])
                             }
                             className="w-full"
                         />

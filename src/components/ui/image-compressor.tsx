@@ -159,7 +159,7 @@ export default function ImageCompressor() {
                 <h1 className="text-4xl font-bold tracking-tight">
                     Image Compressor
                 </h1>
-                <p className="text-zinc-600 dark:text-zinc-400">
+                <p className="text-muted-foreground">
                     Resize and compress images entirely in your browser using
                     WebAssembly
                 </p>
@@ -173,7 +173,7 @@ export default function ImageCompressor() {
                 <>
                     <ModeTabs value={tabMode} onChange={setTabMode} />
 
-                    <div className="bg-zinc-50 dark:bg-zinc-900 rounded-lg p-6 space-y-4">
+                    <div className="bg-muted rounded-lg p-6 space-y-4">
                         {tabMode === 'dimensions' ? (
                             <DimensionsSettings
                                 width={width}

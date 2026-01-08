@@ -1,9 +1,9 @@
-import type { ImageInfo } from '@/lib/wasm'
-import { formatBytes } from '@/lib/wasm'
+import type { ImageInfo } from '@/lib/wasm';
+import { formatBytes } from '@/lib/wasm';
 
 interface OriginalPreviewProps {
-    previewUrl: string | null
-    info: ImageInfo | null
+    previewUrl: string | null;
+    info: ImageInfo | null;
 }
 
 export function OriginalPreview({ previewUrl, info }: OriginalPreviewProps) {
@@ -11,7 +11,7 @@ export function OriginalPreview({ previewUrl, info }: OriginalPreviewProps) {
         <div className="space-y-3">
             <h3 className="text-lg font-semibold">Original</h3>
             {previewUrl && (
-                <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg overflow-hidden">
+                <div className="border border-border rounded-lg overflow-hidden">
                     <img
                         src={previewUrl}
                         alt="Original"
@@ -20,7 +20,7 @@ export function OriginalPreview({ previewUrl, info }: OriginalPreviewProps) {
                 </div>
             )}
             {info && (
-                <div className="text-sm space-y-1 text-zinc-600 dark:text-zinc-400">
+                <div className="text-sm space-y-1 text-muted-foreground">
                     <p>
                         Dimensions:{' '}
                         {info.width > 0 && info.height > 0
@@ -37,5 +37,5 @@ export function OriginalPreview({ previewUrl, info }: OriginalPreviewProps) {
                 </div>
             )}
         </div>
-    )
+    );
 }

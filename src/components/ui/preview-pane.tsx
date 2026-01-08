@@ -1,24 +1,24 @@
-import { OriginalPreview } from './original-preview'
-import { CompressedPreview } from './compressed-preview'
-import type { ImageInfo } from '@/lib/wasm'
+import { OriginalPreview } from './original-preview';
+import { CompressedPreview } from './compressed-preview';
+import type { ImageInfo } from '@/lib/wasm';
 
 interface CompressedInfo {
-    size: number
-    width: number
-    height: number
+    size: number;
+    width: number;
+    height: number;
 }
 
 interface PreviewPaneProps {
     original: {
-        previewUrl: string | null
-        info: ImageInfo | null
-    }
+        previewUrl: string | null;
+        info: ImageInfo | null;
+    };
     compressed: {
-        previewUrl: string | null
-        info: CompressedInfo | null
-        originalSize?: number
-    }
-    onDownload: () => void
+        previewUrl: string | null;
+        info: CompressedInfo | null;
+        originalSize?: number;
+    };
+    onDownload: () => void;
 }
 
 export function PreviewPane({
@@ -39,5 +39,5 @@ export function PreviewPane({
                 onDownload={onDownload}
             />
         </div>
-    )
+    );
 }
