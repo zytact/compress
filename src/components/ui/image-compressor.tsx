@@ -182,6 +182,7 @@ export default function ImageCompressor() {
                                 originalHeight={originalInfo?.height ?? null}
                                 outputFormat={outputFormat}
                                 quality={quality}
+                                originalFormat={originalInfo?.format ?? null}
                                 onDimensionsChange={(w, h) => {
                                     setWidth(w);
                                     setHeight(h);

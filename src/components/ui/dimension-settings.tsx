@@ -1,16 +1,17 @@
-import { useEffect, useState } from 'react'
-import { OutputFormat } from '@/lib/wasm'
+import { useEffect, useState } from 'react';
+import { OutputFormat } from '@/lib/wasm';
 
 interface DimensionsSettingsProps {
-    width: number
-    height: number
-    originalWidth: number | null
-    originalHeight: number | null
-    outputFormat: OutputFormat
-    quality: number
-    onDimensionsChange: (width: number, height: number) => void
-    onOutputFormatChange: (value: OutputFormat) => void
-    onQualityChange: (value: number) => void
+    width: number;
+    height: number;
+    originalWidth: number | null;
+    originalHeight: number | null;
+    outputFormat: OutputFormat;
+    quality: number;
+    originalFormat: string | null;
+    onDimensionsChange: (width: number, height: number) => void;
+    onOutputFormatChange: (value: OutputFormat) => void;
+    onQualityChange: (value: number) => void;
 }
 
 export function DimensionsSettings({
@@ -20,67 +21,68 @@ export function DimensionsSettings({
     originalHeight,
     outputFormat,
     quality,
+    originalFormat,
     onDimensionsChange,
     onOutputFormatChange,
     onQualityChange,
 }: DimensionsSettingsProps) {
     // Calculate aspect ratio from original image
     const aspectRatio =
-        originalWidth && originalHeight ? originalWidth / originalHeight : null
+        originalWidth && originalHeight ? originalWidth / originalHeight : null;
     // Track if user attempted to exceed original dimensions
-    const [widthExceeded, setWidthExceeded] = useState(false)
-    const [heightExceeded, setHeightExceeded] = useState(false)
+    const [widthExceeded, setWidthExceeded] = useState(false);
+    const [heightExceeded, setHeightExceeded] = useState(false);
 
     const handleWidthChange = (value: number) => {
-        const exceeds = originalWidth !== null && value > originalWidth
-        setWidthExceeded(exceeds)
+        const exceeds = originalWidth !== null && value > originalWidth;
+        setWidthExceeded(exceeds);
 
         // Clamp to original dimensions (no upscaling)
         const clampedWidth = originalWidth
             ? Math.min(value, originalWidth)
-            : value
+            : value;
 
         if (aspectRatio && clampedWidth > 0) {
             // Auto-calculate height based on aspect ratio
-            const calculatedHeight = Math.round(clampedWidth / aspectRatio)
-            onDimensionsChange(clampedWidth, calculatedHeight)
+            const calculatedHeight = Math.round(clampedWidth / aspectRatio);
+            onDimensionsChange(clampedWidth, calculatedHeight);
         } else {
-            onDimensionsChange(clampedWidth, height)
+            onDimensionsChange(clampedWidth, height);
         }
-    }
+    };
 
     const handleHeightChange = (value: number) => {
-        const exceeds = originalHeight !== null && value > originalHeight
-        setHeightExceeded(exceeds)
+        const exceeds = originalHeight !== null && value > originalHeight;
+        setHeightExceeded(exceeds);
 
         // Clamp to original dimensions (no upscaling)
         const clampedHeight = originalHeight
             ? Math.min(value, originalHeight)
-            : value
+            : value;
 
         if (aspectRatio && clampedHeight > 0) {
             // Auto-calculate width based on aspect ratio
-            const calculatedWidth = Math.round(clampedHeight * aspectRatio)
-            onDimensionsChange(calculatedWidth, clampedHeight)
+            const calculatedWidth = Math.round(clampedHeight * aspectRatio);
+            onDimensionsChange(calculatedWidth, clampedHeight);
         } else {
-            onDimensionsChange(width, clampedHeight)
+            onDimensionsChange(width, clampedHeight);
         }
-    }
+    };
 
     // Clear exceeded state after a delay (visual feedback)
     useEffect(() => {
         if (widthExceeded) {
-            const timer = setTimeout(() => setWidthExceeded(false), 2000)
-            return () => clearTimeout(timer)
+            const timer = setTimeout(() => setWidthExceeded(false), 2000);
+            return () => clearTimeout(timer);
         }
-    }, [widthExceeded])
+    }, [widthExceeded]);
 
     useEffect(() => {
         if (heightExceeded) {
-            const timer = setTimeout(() => setHeightExceeded(false), 2000)
-            return () => clearTimeout(timer)
+            const timer = setTimeout(() => setHeightExceeded(false), 2000);
+            return () => clearTimeout(timer);
         }
-    }, [heightExceeded])
+    }, [heightExceeded]);
 
     return (
         <>
@@ -156,23 +158,27 @@ export function DimensionsSettings({
                 </select>
             </div>
 
-            {outputFormat !== OutputFormat.Png && (
-                <div>
-                    <label className="block text-sm font-medium mb-2">
-                        Quality: {quality}%
-                    </label>
-                    <input
-                        type="range"
-                        min="1"
-                        max="100"
-                        value={quality}
-                        onChange={(e) =>
-                            onQualityChange(parseInt(e.target.value))
-                        }
-                        className="w-full"
-                    />
-                </div>
-            )}
+            {outputFormat !== OutputFormat.Png &&
+                !(
+                    outputFormat === OutputFormat.Original &&
+                    originalFormat === 'PNG'
+                ) && (
+                    <div>
+                        <label className="block text-sm font-medium mb-2">
+                            Quality: {quality}%
+                        </label>
+                        <input
+                            type="range"
+                            min="1"
+                            max="100"
+                            value={quality}
+                            onChange={(e) =>
+                                onQualityChange(parseInt(e.target.value))
+                            }
+                            className="w-full"
+                        />
+                    </div>
+                )}
         </>
-    )
+    );
 }
