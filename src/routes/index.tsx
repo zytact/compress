@@ -5,7 +5,7 @@ export const Route = createFileRoute('/')({ component: App });
 
 function App() {
     return (
-        <div className="relative h-screen overflow-auto">
+        <div className="relative">
             <ImageCompressor />
         </div>
     );
