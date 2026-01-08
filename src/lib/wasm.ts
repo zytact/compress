@@ -1,9 +1,9 @@
 // WASM loader and wrapper
 
-type WasmModule = any // Dynamic import
+type WasmModule = any; // Dynamic import
 
-let wasmModule: WasmModule | null = null
-let initPromise: Promise<WasmModule> | null = null
+let wasmModule: WasmModule | null = null;
+let initPromise: Promise<WasmModule> | null = null;
 
 export enum OutputFormat {
     Jpeg = 0,
@@ -12,24 +12,24 @@ export enum OutputFormat {
 }
 
 export interface ImageInfo {
-    width: number
-    height: number
-    format: string
-    size_bytes: number
+    width: number;
+    height: number;
+    format: string;
+    size_bytes: number;
 }
 
 export interface ResizeByDimensionsOptions {
-    width: number
-    height: number
-    format: OutputFormat
-    quality?: number
+    width: number;
+    height: number;
+    format: OutputFormat;
+    quality?: number;
 }
 
 export interface ResizeByFilesizeOptions {
-    targetBytes: number
-    floorQuality?: number
-    ceilQuality?: number
-    tolerancePercent?: number
+    targetBytes: number;
+    floorQuality?: number;
+    ceilQuality?: number;
+    tolerancePercent?: number;
 }
 
 /**
@@ -38,31 +38,31 @@ export interface ResizeByFilesizeOptions {
  */
 export async function initWasm(): Promise<WasmModule> {
     if (wasmModule) {
-        return wasmModule
+        return wasmModule;
     }
 
     if (initPromise) {
-        return initPromise
+        return initPromise;
     }
 
     initPromise = (async () => {
         try {
             // Dynamic import of the WASM module
             const wasm =
-                await import('../../public/wasm/image_compress_wasm.js')
-            await wasm.default()
-            wasm.init_panic_hook()
-            wasmModule = wasm
-            return wasm
+                await import('../../public/wasm/image_compress_wasm.js');
+            await wasm.default();
+            wasm.init_panic_hook();
+            wasmModule = wasm;
+            return wasm;
         } catch (error) {
-            initPromise = null
+            initPromise = null;
             throw new Error(
                 `Failed to initialize WASM module: ${error instanceof Error ? error.message : String(error)}`,
-            )
+            );
         }
-    })()
+    })();
 
-    return initPromise
+    return initPromise;
 }
 
 /**
@@ -72,7 +72,7 @@ export async function resizeByDimensions(
     imageData: Uint8Array,
     options: ResizeByDimensionsOptions,
 ): Promise<Uint8Array> {
-    const wasm = await initWasm()
+    const wasm = await initWasm();
 
     try {
         const result = wasm.resize_by_dimensions(
@@ -81,12 +81,12 @@ export async function resizeByDimensions(
             options.height,
             options.format,
             options.quality,
-        )
-        return new Uint8Array(result)
+        );
+        return new Uint8Array(result);
     } catch (error) {
         throw new Error(
             `Failed to resize image: ${error instanceof Error ? error.message : String(error)}`,
-        )
+        );
     }
 }
 
@@ -98,7 +98,7 @@ export async function resizeByFilesize(
     imageData: Uint8Array,
     options: ResizeByFilesizeOptions,
 ): Promise<Uint8Array> {
-    const wasm = await initWasm()
+    const wasm = await initWasm();
 
     try {
         const result = wasm.resize_by_filesize(
@@ -107,12 +107,12 @@ export async function resizeByFilesize(
             options.floorQuality,
             options.ceilQuality,
             options.tolerancePercent,
-        )
-        return new Uint8Array(result)
+        );
+        return new Uint8Array(result);
     } catch (error) {
         throw new Error(
             `Failed to resize image to target size: ${error instanceof Error ? error.message : String(error)}`,
-        )
+        );
     }
 }
 
@@ -121,17 +121,17 @@ export async function resizeByFilesize(
  */
 export async function fileToUint8Array(file: File): Promise<Uint8Array> {
     return new Promise((resolve, reject) => {
-        const reader = new FileReader()
+        const reader = new FileReader();
         reader.onload = () => {
             if (reader.result instanceof ArrayBuffer) {
-                resolve(new Uint8Array(reader.result))
+                resolve(new Uint8Array(reader.result));
             } else {
-                reject(new Error('Failed to read file as ArrayBuffer'))
+                reject(new Error('Failed to read file as ArrayBuffer'));
             }
-        }
-        reader.onerror = () => reject(reader.error)
-        reader.readAsArrayBuffer(file)
-    })
+        };
+        reader.onerror = () => reject(reader.error);
+        reader.readAsArrayBuffer(file);
+    });
 }
 
 /**
@@ -141,32 +141,32 @@ export async function getImageDimensionsFromUrl(
     url: string,
 ): Promise<{ width: number; height: number }> {
     return new Promise((resolve, reject) => {
-        const img = new Image()
+        const img = new Image();
         img.onload = () => {
-            resolve({ width: img.naturalWidth, height: img.naturalHeight })
-        }
-        img.onerror = () => reject(new Error('Failed to load image'))
-        img.src = url
-    })
+            resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        };
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = url;
+    });
 }
 
 /**
  * Infer format from file extension
  */
 export function inferFormatFromFilename(filename: string): string {
-    const ext = filename.toLowerCase().split('.').pop()
+    const ext = filename.toLowerCase().split('.').pop();
     switch (ext) {
         case 'jpg':
         case 'jpeg':
-            return 'JPEG'
+            return 'JPEG';
         case 'png':
-            return 'PNG'
+            return 'PNG';
         case 'gif':
-            return 'GIF'
+            return 'GIF';
         case 'webp':
-            return 'WebP'
+            return 'WebP';
         default:
-            return 'unknown'
+            return 'unknown';
     }
 }
 
@@ -177,7 +177,7 @@ export function uint8ArrayToBlob(
     data: Uint8Array,
     mimeType: string = 'image/jpeg',
 ): Blob {
-    return new Blob([new Uint8Array(data)], { type: mimeType })
+    return new Blob([new Uint8Array(data)], { type: mimeType });
 }
 
 /**
@@ -186,11 +186,11 @@ export function uint8ArrayToBlob(
 export function getMimeType(format: OutputFormat): string {
     switch (format) {
         case OutputFormat.Jpeg:
-            return 'image/jpeg'
+            return 'image/jpeg';
         case OutputFormat.Png:
-            return 'image/png'
+            return 'image/png';
         default:
-            return 'image/jpeg'
+            return 'image/jpeg';
     }
 }
 
@@ -198,11 +198,11 @@ export function getMimeType(format: OutputFormat): string {
  * Format bytes to human-readable size
  */
 export function formatBytes(bytes: number): string {
-    if (bytes === 0) return '0 Bytes'
+    if (bytes === 0) return '0 Bytes';
 
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
 
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
