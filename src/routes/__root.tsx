@@ -54,10 +54,49 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             </head>
             <body>
                 <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-                    <div className="absolute top-2 right-2 z-50">
+                    <div className="absolute top-2 right-2 z-50 flex items-center gap-3">
+                        <a
+                            href="https://github.com/zytact/compress"
+                            aria-label="View source on GitHub"
+                            title="View Source Code"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-block"
+                        >
+                            {/* Light theme icon */}
+                            <img
+                                src="/GitHub_light.svg"
+                                alt="GitHub"
+                                className="h-6 w-6 block dark:hidden"
+                            />
+                            {/* Dark theme icon */}
+                            <img
+                                src="/GitHub_dark.svg"
+                                alt="GitHub"
+                                className="h-6 w-6 hidden dark:block"
+                            />
+                        </a>
                         <ModeToggle />
                     </div>
                     {children}
+                    <footer className="absolute bottom-4 left-1/2 -translate-x-1/2 text-sm text-foreground/80">
+                        <span>
+                            Made with{' '}
+                            <span className="text-red-500" aria-label="love">
+                                ❤️
+                            </span>{' '}
+                            by{' '}
+                        </span>
+                        <a
+                            href="https://zytact.com"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-foreground hover:text-foreground transition-colors"
+                            aria-label="Visit Arnab's website"
+                        >
+                            <b>Arnab</b>
+                        </a>
+                    </footer>
                 </ThemeProvider>
                 <TanStackDevtools
                     config={{
