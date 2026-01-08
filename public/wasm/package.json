@@ -2,10 +2,10 @@
     "name": "image-compress-wasm",
     "type": "module",
     "collaborators": [
-        "compress team"
+        "zytact"
     ],
     "description": "WebAssembly image compression and resizing library",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "license": "MIT",
     "files": [
         "image_compress_wasm_bg.wasm",

@@ -1,8 +1,8 @@
 [package]
 name = "image-compress-wasm"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
-authors = ["compress team"]
+authors = ["zytact"]
 license = "MIT"
 description = "WebAssembly image compression and resizing library"
 
