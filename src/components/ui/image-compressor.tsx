@@ -12,9 +12,11 @@ import type { ImageInfo } from '@/lib/wasm';
 import {
     OutputFormat,
     fileToUint8Array,
+    getFileExtension,
     getImageDimensionsFromUrl,
     getMimeType,
     inferFormatFromFilename,
+    replaceFileExtension,
     resizeByDimensions,
     resizeByFilesize,
     uint8ArrayToBlob,
@@ -48,6 +50,7 @@ export default function ImageCompressor() {
     const [targetSize, setTargetSize] = useState<number>(500);
 
     const compressedBlobRef = useRef<Blob | null>(null);
+    const compressedFormatRef = useRef<OutputFormat>(OutputFormat.Jpeg);
 
     const handleFileSelect = useCallback(async (file: File) => {
         setError(null);
@@ -94,14 +97,33 @@ export default function ImageCompressor() {
         try {
             const data = await fileToUint8Array(selectedFile);
             let result: Uint8Array;
+            let actualFormat: OutputFormat;
 
             if (tabMode === 'dimensions') {
+                // Handle OutputFormat.Original by using the actual original format
+                let effectiveFormat = outputFormat;
+                if (
+                    outputFormat === OutputFormat.Original &&
+                    originalInfo?.format
+                ) {
+                    const origFormat = originalInfo.format.toUpperCase();
+                    if (origFormat === 'JPEG' || origFormat === 'JPG') {
+                        effectiveFormat = OutputFormat.Jpeg;
+                    } else if (origFormat === 'PNG') {
+                        effectiveFormat = OutputFormat.Png;
+                    } else {
+                        // Default to JPEG for unsupported formats
+                        effectiveFormat = OutputFormat.Jpeg;
+                    }
+                }
+
                 result = await resizeByDimensions(data, {
                     width,
                     height,
-                    format: outputFormat,
+                    format: effectiveFormat,
                     quality,
                 });
+                actualFormat = effectiveFormat;
             } else {
                 result = await resizeByFilesize(data, {
                     targetBytes: targetSize * 1024,
@@ -109,14 +131,13 @@ export default function ImageCompressor() {
                     ceilQuality: 95,
                     tolerancePercent: 0,
                 });
+                actualFormat = OutputFormat.Jpeg;
             }
 
-            const mimeType =
-                tabMode === 'dimensions'
-                    ? getMimeType(outputFormat)
-                    : 'image/jpeg';
+            const mimeType = getMimeType(actualFormat);
             const blob = uint8ArrayToBlob(result, mimeType);
             compressedBlobRef.current = blob;
+            compressedFormatRef.current = actualFormat;
 
             const previewUrl = URL.createObjectURL(blob);
             setCompressedPreview(previewUrl);
@@ -141,12 +162,17 @@ export default function ImageCompressor() {
     };
 
     const handleDownload = () => {
-        if (!compressedBlobRef.current) return;
+        if (!compressedBlobRef.current || !selectedFile) return;
 
         const url = URL.createObjectURL(compressedBlobRef.current);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `compressed_${selectedFile?.name || 'image.jpg'}`;
+
+        // Use the actual format that was used during compression
+        const newExtension = getFileExtension(compressedFormatRef.current);
+        const downloadFilename = `compressed_${replaceFileExtension(selectedFile.name, newExtension)}`;
+
+        a.download = downloadFilename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

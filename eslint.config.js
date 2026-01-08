@@ -1,10 +1,10 @@
 //  @ts-check
 
-import { tanstackConfig } from '@tanstack/eslint-config'
+import { tanstackConfig } from '@tanstack/eslint-config';
 
 export default [
     ...tanstackConfig,
     {
-        ignores: ['public/wasm/**'],
+        ignores: ['public/wasm/**', '.output/**', '*.config.js'],
     },
-]
+];

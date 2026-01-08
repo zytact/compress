@@ -195,6 +195,36 @@ export function getMimeType(format: OutputFormat): string {
 }
 
 /**
+ * Get file extension from OutputFormat
+ */
+export function getFileExtension(format: OutputFormat): string {
+    switch (format) {
+        case OutputFormat.Jpeg:
+            return 'jpg';
+        case OutputFormat.Png:
+            return 'png';
+        default:
+            return 'jpg';
+    }
+}
+
+/**
+ * Replace file extension in filename
+ */
+export function replaceFileExtension(
+    filename: string,
+    newExtension: string,
+): string {
+    const lastDotIndex = filename.lastIndexOf('.');
+    if (lastDotIndex === -1) {
+        // No extension found, append new extension
+        return `${filename}.${newExtension}`;
+    }
+    // Replace existing extension
+    return filename.substring(0, lastDotIndex) + `.${newExtension}`;
+}
+
+/**
  * Format bytes to human-readable size
  */
 export function formatBytes(bytes: number): string {
