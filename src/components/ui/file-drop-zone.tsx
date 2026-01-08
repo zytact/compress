@@ -49,7 +49,7 @@ export function FileDropzone({
                     Drop an image here or click to select
                 </p>
                 <p className="text-sm text-muted-foreground">
-                    Supports JPEG, PNG, and HEIC (Safari-only)
+                    Supports JPEG, PNG, and HEIC (on supported devices)
                 </p>
             </div>
         </div>

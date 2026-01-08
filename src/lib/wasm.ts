@@ -135,7 +135,7 @@ export async function fileToUint8Array(file: File): Promise<Uint8Array> {
 }
 
 /**
- * Convert HEIC/HEIF to JPEG using browser's native decoding (Safari-only)
+ * Convert HEIC/HEIF to JPEG using browser's native decoding (on supported devices)
  * Uses capability-based detection to check if browser supports HEIC
  */
 export async function convertHeicToJpeg(
