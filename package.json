@@ -5,7 +5,7 @@
     "scripts": {
         "dev": "vite dev --port 3000",
         "build:wasm": "cd wasm && wasm-pack build --target web --out-dir ../public/wasm",
-        "build": "bun run build:wasm && vite build",
+        "build": "vite build",
         "preview": "vite preview",
         "test": "vitest run",
         "lint": "eslint",
