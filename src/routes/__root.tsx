@@ -4,6 +4,7 @@ import { TanStackDevtools } from '@tanstack/react-devtools';
 
 import appCss from '../styles.css?url';
 import { ThemeProvider } from '@/components/theme-provider';
+import { ModeToggle } from '@/components/ui/mode-toggle';
 
 export const Route = createRootRoute({
     head: () => ({
@@ -53,6 +54,9 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             </head>
             <body>
                 <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+                    <div className="absolute top-2 right-2 z-50">
+                        <ModeToggle />
+                    </div>
                     {children}
                 </ThemeProvider>
                 <TanStackDevtools
