@@ -54,7 +54,8 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             </head>
             <body className="flex flex-col min-h-screen">
                 <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-                    <div className="absolute top-2 right-2 z-50 flex items-center gap-3">
+                    <div className="absolute top-2 right-2 z-50 flex flex-col md:flex-row items-center gap-3">
+                        <ModeToggle />
                         <a
                             href="https://github.com/zytact/compress"
                             aria-label="View source on GitHub"
@@ -76,7 +77,6 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                                 className="h-6 w-6 hidden dark:block"
                             />
                         </a>
-                        <ModeToggle />
                     </div>
                     <div className="flex-1">{children}</div>
                     <footer className="py-4 text-center text-sm text-foreground/80">
