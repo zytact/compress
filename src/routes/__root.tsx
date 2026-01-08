@@ -20,8 +20,19 @@ export const Route = createRootRoute({
             },
             {
                 name: 'description',
-                content: 'Compress images right on the Browser.',
+                content: 'Compress images right on the Browser',
             },
+            // OpenGraph
+            { property: 'og:title', content: 'Compress' },
+            {
+                property: 'og:description',
+                content: 'Compress images right on the Browser',
+            },
+            { property: 'og:image', content: '/og-image.png' },
+            { property: 'og:type', content: 'website' },
+            // Twitter
+            { name: 'twitter:card', content: 'summary_large_image' },
+            { name: 'twitter:image', content: '/og-image.png' },
         ],
         links: [
             {
