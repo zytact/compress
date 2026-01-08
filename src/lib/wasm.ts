@@ -135,6 +135,101 @@ export async function fileToUint8Array(file: File): Promise<Uint8Array> {
 }
 
 /**
+ * Convert HEIC/HEIF to JPEG using browser's native decoding (Safari-only)
+ * Uses capability-based detection to check if browser supports HEIC
+ */
+export async function convertHeicToJpeg(
+    file: File,
+    quality: number = 0.95,
+): Promise<Blob> {
+    try {
+        // Try createImageBitmap first (fast path for modern browsers)
+        try {
+            const imageBitmap = await createImageBitmap(file);
+            const canvas = document.createElement('canvas');
+            canvas.width = imageBitmap.width;
+            canvas.height = imageBitmap.height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                throw new Error('Failed to get canvas context');
+            }
+            ctx.drawImage(imageBitmap, 0, 0);
+            imageBitmap.close();
+
+            return new Promise<Blob>((resolve, reject) => {
+                canvas.toBlob(
+                    (blob) => {
+                        if (blob) {
+                            resolve(blob);
+                        } else {
+                            reject(
+                                new Error('Failed to convert canvas to blob'),
+                            );
+                        }
+                    },
+                    'image/jpeg',
+                    quality,
+                );
+            });
+        } catch (bitmapError) {
+            // Fallback to HTMLImageElement
+            const url = URL.createObjectURL(file);
+            try {
+                const img = await new Promise<HTMLImageElement>(
+                    (resolve, reject) => {
+                        const image = new Image();
+                        image.onload = () => resolve(image);
+                        image.onerror = () =>
+                            reject(
+                                new Error(
+                                    'Browser cannot decode HEIC. Please use Safari or convert to JPEG/PNG.',
+                                ),
+                            );
+                        image.src = url;
+                    },
+                );
+
+                // Draw to canvas and convert to JPEG
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    throw new Error('Failed to get canvas context');
+                }
+                ctx.drawImage(img, 0, 0);
+                URL.revokeObjectURL(url);
+
+                return new Promise<Blob>((resolve, reject) => {
+                    canvas.toBlob(
+                        (blob) => {
+                            if (blob) {
+                                resolve(blob);
+                            } else {
+                                reject(
+                                    new Error(
+                                        'Failed to convert canvas to blob',
+                                    ),
+                                );
+                            }
+                        },
+                        'image/jpeg',
+                        quality,
+                    );
+                });
+            } catch (imgError) {
+                URL.revokeObjectURL(url);
+                throw imgError;
+            }
+        }
+    } catch (error) {
+        throw new Error(
+            `HEIC conversion failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+    }
+}
+
+/**
  * Get image dimensions from browser using Image element
  */
 export async function getImageDimensionsFromUrl(
@@ -165,6 +260,9 @@ export function inferFormatFromFilename(filename: string): string {
             return 'GIF';
         case 'webp':
             return 'WebP';
+        case 'heic':
+        case 'heif':
+            return 'HEIC';
         default:
             return 'unknown';
     }

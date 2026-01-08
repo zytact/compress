@@ -11,6 +11,7 @@ import { PreviewPane } from './preview-pane';
 import type { ImageInfo } from '@/lib/wasm';
 import {
     OutputFormat,
+    convertHeicToJpeg,
     fileToUint8Array,
     getFileExtension,
     getImageDimensionsFromUrl,
@@ -51,42 +52,67 @@ export default function ImageCompressor() {
 
     const compressedBlobRef = useRef<Blob | null>(null);
     const compressedFormatRef = useRef<OutputFormat>(OutputFormat.Jpeg);
+    const convertedHeicBlobRef = useRef<Blob | null>(null);
 
-    const handleFileSelect = useCallback(async (file: File) => {
-        setError(null);
-        setSelectedFile(file);
-        setCompressedPreview(null);
-        setCompressedInfo(null);
+    const handleFileSelect = useCallback(
+        async (file: File) => {
+            setError(null);
+            setSelectedFile(file);
+            setCompressedPreview(null);
+            setCompressedInfo(null);
+            convertedHeicBlobRef.current = null;
 
-        const previewUrl = URL.createObjectURL(file);
-        setOriginalPreview(previewUrl);
+            try {
+                const format = inferFormatFromFilename(file.name);
+                let previewUrl: string;
 
-        try {
-            const browserDims = await getImageDimensionsFromUrl(previewUrl);
+                // If HEIC, attempt browser-native conversion to JPEG
+                if (format === 'HEIC') {
+                    // If user had "Original" selected, switch to JPEG
+                    if (outputFormat === OutputFormat.Original) {
+                        setOutputFormat(OutputFormat.Jpeg);
+                    }
 
-            const imgWidth = browserDims.width;
-            const imgHeight = browserDims.height;
+                    try {
+                        const convertedBlob = await convertHeicToJpeg(file);
+                        convertedHeicBlobRef.current = convertedBlob;
+                        previewUrl = URL.createObjectURL(convertedBlob);
+                    } catch (conversionError) {
+                        throw new Error(
+                            `${conversionError instanceof Error ? conversionError.message : String(conversionError)}`,
+                        );
+                    }
+                } else {
+                    previewUrl = URL.createObjectURL(file);
+                }
 
-            const format = inferFormatFromFilename(file.name);
+                setOriginalPreview(previewUrl);
 
-            const size_bytes = file.size;
+                const browserDims = await getImageDimensionsFromUrl(previewUrl);
 
-            const info: ImageInfo = {
-                width: imgWidth,
-                height: imgHeight,
-                size_bytes,
-                format,
-            };
+                const imgWidth = browserDims.width;
+                const imgHeight = browserDims.height;
 
-            setOriginalInfo(info);
-            setWidth(imgWidth);
-            setHeight(imgHeight);
-        } catch (err) {
-            setError(
-                `Failed to load image: ${err instanceof Error ? err.message : String(err)}`,
-            );
-        }
-    }, []);
+                const size_bytes = file.size;
+
+                const info: ImageInfo = {
+                    width: imgWidth,
+                    height: imgHeight,
+                    size_bytes,
+                    format,
+                };
+
+                setOriginalInfo(info);
+                setWidth(imgWidth);
+                setHeight(imgHeight);
+            } catch (err) {
+                setError(
+                    `Failed to load image: ${err instanceof Error ? err.message : String(err)}`,
+                );
+            }
+        },
+        [outputFormat],
+    );
 
     const handleCompress = async () => {
         if (!selectedFile) return;
@@ -95,7 +121,15 @@ export default function ImageCompressor() {
         setError(null);
 
         try {
-            const data = await fileToUint8Array(selectedFile);
+            // Use converted HEIC blob if available, otherwise use original file
+            const sourceBlob = convertedHeicBlobRef.current || selectedFile;
+            const data = await fileToUint8Array(
+                sourceBlob instanceof Blob && !(sourceBlob instanceof File)
+                    ? new File([sourceBlob], selectedFile.name, {
+                          type: sourceBlob.type,
+                      })
+                    : sourceBlob,
+            );
             let result: Uint8Array;
             let actualFormat: OutputFormat;
 
@@ -107,7 +141,12 @@ export default function ImageCompressor() {
                     originalInfo?.format
                 ) {
                     const origFormat = originalInfo.format.toUpperCase();
-                    if (origFormat === 'JPEG' || origFormat === 'JPG') {
+                    // HEIC is converted to JPEG, so treat as JPEG
+                    if (
+                        origFormat === 'JPEG' ||
+                        origFormat === 'JPG' ||
+                        origFormat === 'HEIC'
+                    ) {
                         effectiveFormat = OutputFormat.Jpeg;
                     } else if (origFormat === 'PNG') {
                         effectiveFormat = OutputFormat.Png;

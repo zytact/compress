@@ -8,7 +8,7 @@ interface FileDropzoneProps {
 
 export function FileDropzone({
     onFileSelect,
-    accept = 'image/jpeg,image/png',
+    accept = 'image/jpeg,image/png,image/heic,image/heif,.heic,.heif',
     disabled = false,
 }: FileDropzoneProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -49,7 +49,7 @@ export function FileDropzone({
                     Drop an image here or click to select
                 </p>
                 <p className="text-sm text-muted-foreground">
-                    Supports JPEG and PNG
+                    Supports JPEG, PNG, and HEIC (Safari-only)
                 </p>
             </div>
         </div>

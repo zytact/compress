@@ -154,9 +154,11 @@ export function DimensionsSettings({
                 >
                     <option value={OutputFormat.Jpeg}>JPEG</option>
                     <option value={OutputFormat.Png}>PNG</option>
-                    <option value={OutputFormat.Original}>
-                        Original Format
-                    </option>
+                    {originalFormat !== 'HEIC' && (
+                        <option value={OutputFormat.Original}>
+                            Original Format
+                        </option>
+                    )}
                 </select>
             </div>
 
