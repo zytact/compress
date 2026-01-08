@@ -16,7 +16,11 @@ export const Route = createRootRoute({
                 content: 'width=device-width, initial-scale=1',
             },
             {
-                title: 'TanStack Start Starter',
+                title: 'Compress',
+            },
+            {
+                name: 'description',
+                content: 'Compress images right on the Browser.',
             },
         ],
         links: [

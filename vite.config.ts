@@ -17,6 +17,16 @@ const config = defineConfig({
         tailwindcss(),
         tanstackStart(),
         viteReact(),
+        tanstackStart({
+            prerender: {
+                enabled: true,
+                crawlLinks: true, // Discovers all linkable pages
+            },
+            sitemap: {
+                enabled: true,
+                host: 'https://compress.zytact.com',
+            },
+        }),
     ],
 });
 
