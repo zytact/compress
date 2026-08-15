@@ -37,7 +37,7 @@ Then open `http://localhost:3000` in your browser.
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 24+
 - Bun (for package management)
 - Rust toolchain + `wasm-pack` (for WASM builds)
 
