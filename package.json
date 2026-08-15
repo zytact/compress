@@ -2,6 +2,9 @@
     "name": "compress",
     "private": true,
     "type": "module",
+    "engines": {
+        "node": "24.x"
+    },
     "scripts": {
         "dev": "vite dev --port 3000",
         "build:wasm": "cd wasm && wasm-pack build --target web --out-dir ../public/wasm",
@@ -48,7 +51,7 @@
         "@tanstack/eslint-config": "^0.3.0",
         "@testing-library/dom": "^10.4.0",
         "@testing-library/react": "^16.2.0",
-        "@types/node": "^22.10.2",
+        "@types/node": "^24",
         "@types/react": "^19.2.0",
         "@types/react-dom": "^19.2.0",
         "@vitejs/plugin-react": "^5.0.4",
