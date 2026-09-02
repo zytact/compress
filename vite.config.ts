@@ -7,6 +7,10 @@ import tailwindcss from '@tailwindcss/vite';
 import { nitro } from 'nitro/vite';
 
 const config = defineConfig({
+    // The compression worker is a module worker, and code splitting rules out IIFE
+    worker: {
+        format: 'es',
+    },
     plugins: [
         devtools(),
         nitro(),

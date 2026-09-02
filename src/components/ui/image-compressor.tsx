@@ -1,43 +1,47 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileDropzone } from './file-drop-zone';
 import { ModeTabs } from './mode-tabs';
 import { DimensionsSettings } from './dimension-settings';
 import { FilesizeSettings } from './file-size-settings';
-import { PrimaryAction } from './primary-action';
 import { ErrorBanner } from './error-banner';
 import { PreviewPane } from './preview-pane';
 import type { ImageInfo } from '@/lib/wasm';
+import type { CompressionSettings } from '@/lib/compress';
+import { areSettingsCompressible } from '@/lib/compress';
+import { compress } from '@/lib/compress-client';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import {
     OutputFormat,
     convertHeicToJpeg,
     fileToUint8Array,
     getFileExtension,
     getImageDimensionsFromUrl,
-    getMimeType,
     inferFormatFromFilename,
     replaceFileExtension,
-    resizeByDimensions,
-    resizeByFilesize,
-    uint8ArrayToBlob,
 } from '@/lib/wasm';
 
 type TabMode = 'dimensions' | 'filesize';
 
+interface CompressedState {
+    previewUrl: string;
+    blob: Blob;
+    format: OutputFormat;
+    width: number;
+    height: number;
+}
+
+/** Long enough to swallow a slider drag, short enough to still feel live. */
+const LIVE_UPDATE_DELAY_MS = 300;
+
 export default function ImageCompressor() {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [sourceBytes, setSourceBytes] = useState<Uint8Array | null>(null);
     const [originalPreview, setOriginalPreview] = useState<string | null>(null);
-    const [compressedPreview, setCompressedPreview] = useState<string | null>(
-        null,
-    );
     const [originalInfo, setOriginalInfo] = useState<ImageInfo | null>(null);
-    const [compressedInfo, setCompressedInfo] = useState<{
-        size: number;
-        width: number;
-        height: number;
-    } | null>(null);
-    const [loading, setLoading] = useState(false);
+    const [compressed, setCompressed] = useState<CompressedState | null>(null);
+    const [compressing, setCompressing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [tabMode, setTabMode] = useState<TabMode>('dimensions');
 
@@ -50,62 +54,54 @@ export default function ImageCompressor() {
 
     const [targetSize, setTargetSize] = useState<number>(500);
 
-    const compressedBlobRef = useRef<Blob | null>(null);
-    const compressedFormatRef = useRef<OutputFormat>(OutputFormat.Jpeg);
-    const convertedHeicBlobRef = useRef<Blob | null>(null);
+    const selectionRef = useRef(0);
 
     const handleFileSelect = useCallback(
         async (file: File) => {
+            // Loading a file takes several awaits, and a newer pick wins them all
+            const selection = ++selectionRef.current;
+            const isCurrent = () => selectionRef.current === selection;
+
             setError(null);
             setSelectedFile(file);
-            setCompressedPreview(null);
-            setCompressedInfo(null);
-            convertedHeicBlobRef.current = null;
+            setSourceBytes(null);
+            setCompressed(null);
+            setOriginalPreview(null);
+            setOriginalInfo(null);
 
             try {
                 const format = inferFormatFromFilename(file.name);
-                let previewUrl: string;
+                let source: Blob = file;
 
-                // If HEIC, attempt browser-native conversion to JPEG
+                // HEIC cannot be decoded by the WASM encoder, so convert it first
                 if (format === 'HEIC') {
-                    // If user had "Original" selected, switch to JPEG
                     if (outputFormat === OutputFormat.Original) {
                         setOutputFormat(OutputFormat.Jpeg);
                     }
+                    source = await convertHeicToJpeg(file);
+                }
 
-                    try {
-                        const convertedBlob = await convertHeicToJpeg(file);
-                        convertedHeicBlobRef.current = convertedBlob;
-                        previewUrl = URL.createObjectURL(convertedBlob);
-                    } catch (conversionError) {
-                        throw new Error(
-                            `${conversionError instanceof Error ? conversionError.message : String(conversionError)}`,
-                        );
-                    }
-                } else {
-                    previewUrl = URL.createObjectURL(file);
+                const previewUrl = URL.createObjectURL(source);
+                const dims = await getImageDimensionsFromUrl(previewUrl);
+                const bytes = await fileToUint8Array(source);
+
+                if (!isCurrent()) {
+                    URL.revokeObjectURL(previewUrl);
+                    return;
                 }
 
                 setOriginalPreview(previewUrl);
-
-                const browserDims = await getImageDimensionsFromUrl(previewUrl);
-
-                const imgWidth = browserDims.width;
-                const imgHeight = browserDims.height;
-
-                const size_bytes = file.size;
-
-                const info: ImageInfo = {
-                    width: imgWidth,
-                    height: imgHeight,
-                    size_bytes,
+                setOriginalInfo({
+                    width: dims.width,
+                    height: dims.height,
+                    size_bytes: file.size,
                     format,
-                };
-
-                setOriginalInfo(info);
-                setWidth(imgWidth);
-                setHeight(imgHeight);
+                });
+                setWidth(dims.width);
+                setHeight(dims.height);
+                setSourceBytes(bytes);
             } catch (err) {
+                if (!isCurrent()) return;
                 setError(
                     `Failed to load image: ${err instanceof Error ? err.message : String(err)}`,
                 );
@@ -114,104 +110,76 @@ export default function ImageCompressor() {
         [outputFormat],
     );
 
-    const handleCompress = async () => {
-        if (!selectedFile) return;
+    const settings = useMemo<CompressionSettings>(
+        () =>
+            tabMode === 'dimensions'
+                ? {
+                      mode: 'dimensions',
+                      width,
+                      height,
+                      format: outputFormat,
+                      quality,
+                  }
+                : { mode: 'filesize', targetKb: targetSize },
+        [tabMode, width, height, outputFormat, quality, targetSize],
+    );
+    const debouncedSettings = useDebouncedValue(settings, LIVE_UPDATE_DELAY_MS);
+    // Editing is still in flight while the debounced copy lags the live one
+    const settled = debouncedSettings === settings;
+    const originalFormat = originalInfo?.format ?? null;
 
-        setLoading(true);
+    // Recompress whenever the image or its settled settings change
+    useEffect(() => {
+        if (!sourceBytes || !settled || !areSettingsCompressible(settings)) {
+            setCompressing(false);
+            return;
+        }
+
+        let cancelled = false;
+        setCompressing(true);
         setError(null);
 
-        try {
-            // Use converted HEIC blob if available, otherwise use original file
-            const sourceBlob = convertedHeicBlobRef.current || selectedFile;
-            const data = await fileToUint8Array(
-                sourceBlob instanceof Blob && !(sourceBlob instanceof File)
-                    ? new File([sourceBlob], selectedFile.name, {
-                          type: sourceBlob.type,
-                      })
-                    : sourceBlob,
-            );
-            let result: Uint8Array;
-            let actualFormat: OutputFormat;
-
-            if (tabMode === 'dimensions') {
-                // Handle OutputFormat.Original by using the actual original format
-                let effectiveFormat = outputFormat;
-                if (
-                    outputFormat === OutputFormat.Original &&
-                    originalInfo?.format
-                ) {
-                    const origFormat = originalInfo.format.toUpperCase();
-                    // HEIC is converted to JPEG, so treat as JPEG
-                    if (
-                        origFormat === 'JPEG' ||
-                        origFormat === 'JPG' ||
-                        origFormat === 'HEIC'
-                    ) {
-                        effectiveFormat = OutputFormat.Jpeg;
-                    } else if (origFormat === 'PNG') {
-                        effectiveFormat = OutputFormat.Png;
-                    } else {
-                        // Default to JPEG for unsupported formats
-                        effectiveFormat = OutputFormat.Jpeg;
-                    }
-                }
-
-                result = await resizeByDimensions(data, {
-                    width,
-                    height,
-                    format: effectiveFormat,
-                    quality,
+        compress(sourceBytes, settings, originalFormat)
+            .then((result) => {
+                if (cancelled) return;
+                setCompressed({
+                    previewUrl: URL.createObjectURL(result.blob),
+                    ...result,
                 });
-                actualFormat = effectiveFormat;
-            } else {
-                result = await resizeByFilesize(data, {
-                    targetBytes: targetSize * 1024,
-                    floorQuality: 30,
-                    ceilQuality: 95,
-                    tolerancePercent: 0,
-                });
-                actualFormat = OutputFormat.Jpeg;
-            }
+            })
+            .catch((err: unknown) => {
+                if (cancelled) return;
+                setError(
+                    `Compression failed: ${err instanceof Error ? err.message : String(err)}`,
+                );
+            })
+            .finally(() => {
+                if (!cancelled) setCompressing(false);
+            });
 
-            const mimeType = getMimeType(actualFormat);
-            const blob = uint8ArrayToBlob(result, mimeType);
-            compressedBlobRef.current = blob;
-            compressedFormatRef.current = actualFormat;
+        return () => {
+            cancelled = true;
+        };
+    }, [sourceBytes, settings, settled, originalFormat]);
 
-            const previewUrl = URL.createObjectURL(blob);
-            setCompressedPreview(previewUrl);
+    // Release the previous object URLs once React has committed the new ones
+    useEffect(() => {
+        if (!originalPreview) return;
+        return () => URL.revokeObjectURL(originalPreview);
+    }, [originalPreview]);
 
-            const img = new Image();
-            img.onload = () => {
-                setCompressedInfo({
-                    size: blob.size,
-                    width: img.width,
-                    height: img.height,
-                });
-                URL.revokeObjectURL(previewUrl);
-            };
-            img.src = previewUrl;
-        } catch (err) {
-            setError(
-                `Compression failed: ${err instanceof Error ? err.message : String(err)}`,
-            );
-        } finally {
-            setLoading(false);
-        }
-    };
+    useEffect(() => {
+        if (!compressed) return;
+        return () => URL.revokeObjectURL(compressed.previewUrl);
+    }, [compressed]);
 
     const handleDownload = () => {
-        if (!compressedBlobRef.current || !selectedFile) return;
+        if (!compressed || !selectedFile) return;
 
-        const url = URL.createObjectURL(compressedBlobRef.current);
+        const url = URL.createObjectURL(compressed.blob);
         const a = document.createElement('a');
         a.href = url;
-
-        // Use the actual format that was used during compression
-        const newExtension = getFileExtension(compressedFormatRef.current);
-        const downloadFilename = `compressed_${replaceFileExtension(selectedFile.name, newExtension)}`;
-
-        a.download = downloadFilename;
+        a.download = `compressed_${replaceFileExtension(selectedFile.name, getFileExtension(compressed.format))}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -230,7 +198,7 @@ export default function ImageCompressor() {
                 </p>
             </div>
 
-            <FileDropzone onFileSelect={handleFileSelect} disabled={loading} />
+            <FileDropzone onFileSelect={handleFileSelect} />
 
             {error && <ErrorBanner message={error} />}
 
@@ -247,7 +215,7 @@ export default function ImageCompressor() {
                                 originalHeight={originalInfo?.height ?? null}
                                 outputFormat={outputFormat}
                                 quality={quality}
-                                originalFormat={originalInfo?.format ?? null}
+                                originalFormat={originalFormat}
                                 onDimensionsChange={(w, h) => {
                                     setWidth(w);
                                     setHeight(h);
@@ -261,12 +229,6 @@ export default function ImageCompressor() {
                                 onTargetSizeChange={setTargetSize}
                             />
                         )}
-
-                        <PrimaryAction
-                            onClick={handleCompress}
-                            loading={loading}
-                            disabled={!selectedFile}
-                        />
                     </div>
 
                     <PreviewPane
@@ -275,9 +237,16 @@ export default function ImageCompressor() {
                             info: originalInfo,
                         }}
                         compressed={{
-                            previewUrl: compressedPreview,
-                            info: compressedInfo,
+                            previewUrl: compressed?.previewUrl ?? null,
+                            info: compressed
+                                ? {
+                                      size: compressed.blob.size,
+                                      width: compressed.width,
+                                      height: compressed.height,
+                                  }
+                                : null,
                             originalSize: originalInfo?.size_bytes,
+                            updating: compressing || !settled,
                         }}
                         onDownload={handleDownload}
                     />
