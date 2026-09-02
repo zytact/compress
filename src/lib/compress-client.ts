@@ -32,8 +32,8 @@ export function compress(
             if (data.id !== id) return;
             stopListening();
             if (data.ok) {
-                const { blob, format, width, height } = data;
-                resolve({ blob, format, width, height });
+                const { blob, format, width, height, keptOriginal } = data;
+                resolve({ blob, format, width, height, keptOriginal });
             } else {
                 reject(new Error(data.error));
             }

@@ -1,6 +1,8 @@
 import { Loader2 } from 'lucide-react';
 import { Button } from './button';
+import type { CompressionNotice } from '@/lib/compression-notice';
 import { formatBytes } from '@/lib/wasm';
+import { cn } from '@/lib/utils';
 
 interface CompressedInfo {
     size: number;
@@ -12,6 +14,7 @@ interface CompressedPreviewProps {
     previewUrl: string | null;
     info: CompressedInfo | null;
     originalSize?: number;
+    notice: CompressionNotice | null;
     updating: boolean;
     onDownload: () => void;
 }
@@ -20,6 +23,7 @@ export function CompressedPreview({
     previewUrl,
     info,
     originalSize,
+    notice,
     updating,
     onDownload,
 }: CompressedPreviewProps) {
@@ -52,16 +56,32 @@ export function CompressedPreview({
                                 Dimensions: {info.width} x {info.height}
                             </p>
                             <p>Size: {formatBytes(info.size)}</p>
-                            {originalSize && (
-                                <p className="font-medium text-green-600 dark:text-green-400">
-                                    Reduction:{' '}
-                                    {(
-                                        ((originalSize - info.size) /
-                                            originalSize) *
-                                        100
-                                    ).toFixed(1)}
-                                    %
-                                </p>
+                            {notice ? (
+                                <div
+                                    className={cn(
+                                        'rounded-md border p-3 space-y-1 mt-2',
+                                        notice.tone === 'warning'
+                                            ? 'border-amber-500/40 bg-amber-500/10'
+                                            : 'border-border bg-muted',
+                                    )}
+                                >
+                                    <p className="font-medium text-foreground">
+                                        {notice.message}
+                                    </p>
+                                    <p>{notice.advice}</p>
+                                </div>
+                            ) : (
+                                originalSize && (
+                                    <p className="font-medium text-green-600 dark:text-green-400">
+                                        Reduction:{' '}
+                                        {(
+                                            ((originalSize - info.size) /
+                                                originalSize) *
+                                            100
+                                        ).toFixed(1)}
+                                        %
+                                    </p>
+                                )
                             )}
                         </div>
                     )}
