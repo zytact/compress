@@ -137,9 +137,7 @@ export function DimensionsSettings({
                 <select
                     value={outputFormat}
                     onChange={(e) =>
-                        onOutputFormatChange(
-                            parseInt(e.target.value) as OutputFormat,
-                        )
+                        onOutputFormatChange(parseInt(e.target.value))
                     }
                     className="w-full px-3 py-2 border border-input rounded-lg bg-background"
                 >
