@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
     quality:
-        name: Lint, format and types
+        name: Web quality
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v5
@@ -31,7 +31,7 @@ jobs:
               run: pnpm exec tsc --noEmit
 
     test:
-        name: Test
+        name: Web tests
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v5
@@ -46,7 +46,7 @@ jobs:
             - run: pnpm run test
 
     build:
-        name: Build
+        name: Web build
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v5
