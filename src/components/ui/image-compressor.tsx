@@ -10,6 +10,7 @@ import { PreviewPane } from './preview-pane';
 import type { ImageInfo } from '@/lib/wasm';
 import type { CompressionSettings } from '@/lib/compress';
 import { areSettingsCompressible } from '@/lib/compress';
+import { describeCompression } from '@/lib/compression-notice';
 import { compress } from '@/lib/compress-client';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import {
@@ -30,6 +31,7 @@ interface CompressedState {
     format: OutputFormat;
     width: number;
     height: number;
+    keptOriginal: boolean;
 }
 
 /** Long enough to swallow a slider drag, short enough to still feel live. */
@@ -162,6 +164,18 @@ export default function ImageCompressor() {
         };
     }, [sourceBytes, settings, settled, originalFormat]);
 
+    const notice =
+        compressed && originalInfo
+            ? describeCompression({
+                  keptOriginal: compressed.keptOriginal,
+                  outputFormat: compressed.format,
+                  outputSize: compressed.blob.size,
+                  originalSize: originalInfo.size_bytes,
+                  originalFormat: originalInfo.format,
+                  settings: debouncedSettings,
+              })
+            : null;
+
     // Release the previous object URLs once React has committed the new ones
     useEffect(() => {
         if (!originalPreview) return;
@@ -246,6 +260,7 @@ export default function ImageCompressor() {
                                   }
                                 : null,
                             originalSize: originalInfo?.size_bytes,
+                            notice,
                             updating: compressing || !settled,
                         }}
                         onDownload={handleDownload}
