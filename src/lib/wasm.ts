@@ -117,9 +117,9 @@ export async function resizeByFilesize(
 }
 
 /**
- * Convert File to Uint8Array
+ * Convert a File or Blob to Uint8Array
  */
-export async function fileToUint8Array(file: File): Promise<Uint8Array> {
+export async function fileToUint8Array(file: Blob): Promise<Uint8Array> {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {

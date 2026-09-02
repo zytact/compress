@@ -8,7 +8,7 @@ A fast, privacy-focused image compression and resizing tool that runs entirely i
 - **Resize by File Size**: Automatically find optimal quality to hit a target file size (KB/MB)
 - **Format Conversion**: Convert between JPEG and PNG, or preserve original format
 - **HEIC/HEIF Support**: Convert Apple's HEIC images to JPEG using browser-native APIs
-- **Live Preview**: See before/after comparisons with file sizes and dimensions
+- **Live Preview**: Settings re-compress automatically, with before/after file sizes and dimensions
 - **100% Client-Side**: No uploads, no server processing—your images stay private
 - **Fast WASM Compression**: Powered by Rust/WASM for high-performance image processing
 

@@ -17,6 +17,7 @@ interface PreviewPaneProps {
         previewUrl: string | null;
         info: CompressedInfo | null;
         originalSize?: number;
+        updating: boolean;
     };
     onDownload: () => void;
 }
@@ -36,6 +37,7 @@ export function PreviewPane({
                 previewUrl={compressed.previewUrl}
                 info={compressed.info}
                 originalSize={compressed.originalSize}
+                updating={compressed.updating}
                 onDownload={onDownload}
             />
         </div>
