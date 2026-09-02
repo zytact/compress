@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { NumberInput } from './number-input';
 import { Slider } from './slider';
 import { OutputFormat } from '@/lib/wasm';
 
@@ -93,14 +94,9 @@ export function DimensionsSettings({
                     <label className="block text-sm font-medium mb-2">
                         Width (px)
                     </label>
-                    <input
-                        type="number"
+                    <NumberInput
                         value={width}
-                        min={1}
-                        max={originalWidth ?? undefined}
-                        onChange={(e) =>
-                            handleWidthChange(parseInt(e.target.value) || 0)
-                        }
+                        onValueChange={handleWidthChange}
                         className={`w-full px-3 py-2 border rounded-lg bg-background ${
                             widthExceeded
                                 ? 'border-chart-1 ring-1 ring-chart-1'
@@ -117,14 +113,9 @@ export function DimensionsSettings({
                     <label className="block text-sm font-medium mb-2">
                         Height (px)
                     </label>
-                    <input
-                        type="number"
+                    <NumberInput
                         value={height}
-                        min={1}
-                        max={originalHeight ?? undefined}
-                        onChange={(e) =>
-                            handleHeightChange(parseInt(e.target.value) || 0)
-                        }
+                        onValueChange={handleHeightChange}
                         className={`w-full px-3 py-2 border rounded-lg bg-background ${
                             heightExceeded
                                 ? 'border-chart-1 ring-1 ring-chart-1'
