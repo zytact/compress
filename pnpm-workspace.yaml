@@ -1,4 +1,4 @@
 allowBuilds:
-  esbuild: true
-  unrs-resolver: true
-  wasm-pack: true
+    esbuild: true
+    unrs-resolver: true
+    wasm-pack: true
