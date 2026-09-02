@@ -20,6 +20,8 @@ interface NoticeInput {
     outputSize: number;
     /** Size of the file the user picked, which is what they compare against. */
     originalSize: number;
+    /** Format of the picked file, before any HEIC conversion. */
+    originalFormat: string | null;
     settings: CompressionSettings;
 }
 
@@ -44,19 +46,31 @@ export function describeCompression({
     outputFormat,
     outputSize,
     originalSize,
+    originalFormat,
     settings,
 }: NoticeInput): CompressionNotice | null {
-    // Only a HEIC source reaches here: it is decoded to JPEG before compression
-    // and JPEG needs more bytes than HEIC for the same picture, so there is no
-    // smaller file to fall back to.
-    if (outputSize > originalSize) {
+    // An explicit format request that would have cost bytes gets dropped rather
+    // than honored, so every message below names the format we kept instead.
+    const dropped =
+        settings.mode === 'dimensions' &&
+        settings.format !== OutputFormat.Original &&
+        settings.format !== outputFormat
+            ? formatLabel(settings.format)
+            : null;
+
+    // HEIC is decoded to JPEG before compression and JPEG needs more bytes for
+    // the same picture, so it is the one source with no smaller fallback.
+    if (originalFormat?.toUpperCase() === 'HEIC' && outputSize > originalSize) {
         return {
             tone: 'warning',
-            message: `HEIC fits more into fewer bytes than JPEG can, so this JPEG is ${formatBytes(outputSize)}, larger than your ${formatBytes(originalSize)} original.`,
-            advice: targetAdvice(
-                originalSize,
-                'Switch to By File Size and ask for less than',
-            ),
+            message: `HEIC fits more into fewer bytes than JPEG can, so this JPEG is ${formatBytes(outputSize)}, larger than your ${formatBytes(originalSize)} original.${dropped ? ` The ${dropped} you picked would be larger still.` : ''}`,
+            advice:
+                settings.mode === 'filesize'
+                    ? targetAdvice(originalSize, 'Lower the target below')
+                    : targetAdvice(
+                          originalSize,
+                          'Switch to By File Size and ask for less than',
+                      ),
         };
     }
 
@@ -70,17 +84,11 @@ export function describeCompression({
         };
     }
 
-    // Honoring an explicit format would have cost bytes, so say which one we
-    // kept rather than letting the format dropdown quietly disagree with it.
-    const requested = settings.format;
-    const overrode =
-        requested !== OutputFormat.Original && requested !== outputFormat;
-
     return {
         tone: 'neutral',
-        message: overrode
-            ? `Your original is already well compressed. Saving it as ${formatLabel(requested)} at these settings would make it bigger, so we kept your original ${formatLabel(outputFormat)}.`
+        message: dropped
+            ? `Your original is already well compressed. Saving it as ${dropped} at these settings would make it bigger, so we kept your original ${formatLabel(outputFormat)}.`
             : 'Your original is already well compressed. Saving it at these settings would make it bigger, so we kept the original.',
-        advice: 'Lower the quality or the dimensions to shrink it.',
+        advice: `Lower the quality below ${settings.quality}%, or the dimensions below ${settings.width} x ${settings.height}.`,
     };
 }

@@ -171,6 +171,7 @@ export default function ImageCompressor() {
                   outputFormat: compressed.format,
                   outputSize: compressed.blob.size,
                   originalSize: originalInfo.size_bytes,
+                  originalFormat: originalInfo.format,
                   settings: debouncedSettings,
               })
             : null;
