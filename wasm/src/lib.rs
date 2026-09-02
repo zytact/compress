@@ -71,8 +71,8 @@ pub fn resize_by_filesize(
 ) -> Result<Vec<u8>, JsValue> {
     let img = load_image(data)?;
 
-    let floor = floor_quality.unwrap_or(30).max(1).min(100);
-    let ceil = ceil_quality.unwrap_or(95).max(floor).min(100);
+    let floor = floor_quality.unwrap_or(30).clamp(1, 100);
+    let ceil = ceil_quality.unwrap_or(95).clamp(floor, 100);
 
     // Binary search for the right quality
     let mut low = floor;
@@ -85,35 +85,27 @@ pub fn resize_by_filesize(
     while low <= high {
         let mid = (low + high) / 2;
 
-        match encode_image(&img, InternalOutputFormat::Jpeg(mid)) {
-            Ok(encoded) => {
-                let size = encoded.len() as u32;
-                let diff = if size > target_bytes {
-                    size - target_bytes
-                } else {
-                    target_bytes - size
-                };
+        let encoded = encode_image(&img, InternalOutputFormat::Jpeg(mid))?;
+        let size = encoded.len() as u32;
+        let diff = size.abs_diff(target_bytes);
 
-                // Track best result overall (closest to target)
-                if diff < best_diff {
-                    best_diff = diff;
-                    best_result = Some(encoded.clone());
-                }
+        // Track best result overall (closest to target)
+        if diff < best_diff {
+            best_diff = diff;
+            best_result = Some(encoded.clone());
+        }
 
-                // Track best under-target result
-                if size <= target_bytes && diff < best_under_diff {
-                    best_under_diff = diff;
-                    best_under = Some(encoded.clone());
-                }
+        // Track best under-target result
+        if size <= target_bytes && diff < best_under_diff {
+            best_under_diff = diff;
+            best_under = Some(encoded);
+        }
 
-                // Adjust search range
-                if size > target_bytes {
-                    high = mid.saturating_sub(1);
-                } else {
-                    low = mid + 1;
-                }
-            }
-            Err(e) => return Err(e),
+        // Adjust search range
+        if size > target_bytes {
+            high = mid.saturating_sub(1);
+        } else {
+            low = mid + 1;
         }
 
         // Prevent infinite loop
