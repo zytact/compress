@@ -27,7 +27,7 @@ export function CompressedPreview({
         <div className="space-y-3">
             <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Compressed</h3>
-                {updating && (
+                {updating && previewUrl && (
                     <span
                         role="status"
                         className="flex items-center gap-1.5 text-sm text-muted-foreground"

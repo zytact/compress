@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileDropzone } from './file-drop-zone';
 import { ModeTabs } from './mode-tabs';
 import { DimensionsSettings } from './dimension-settings';
@@ -54,8 +54,14 @@ export default function ImageCompressor() {
 
     const [targetSize, setTargetSize] = useState<number>(500);
 
+    const selectionRef = useRef(0);
+
     const handleFileSelect = useCallback(
         async (file: File) => {
+            // Loading a file takes several awaits, and a newer pick wins them all
+            const selection = ++selectionRef.current;
+            const isCurrent = () => selectionRef.current === selection;
+
             setError(null);
             setSelectedFile(file);
             setSourceBytes(null);
@@ -76,9 +82,15 @@ export default function ImageCompressor() {
                 }
 
                 const previewUrl = URL.createObjectURL(source);
-                setOriginalPreview(previewUrl);
-
                 const dims = await getImageDimensionsFromUrl(previewUrl);
+                const bytes = await fileToUint8Array(source);
+
+                if (!isCurrent()) {
+                    URL.revokeObjectURL(previewUrl);
+                    return;
+                }
+
+                setOriginalPreview(previewUrl);
                 setOriginalInfo({
                     width: dims.width,
                     height: dims.height,
@@ -87,8 +99,9 @@ export default function ImageCompressor() {
                 });
                 setWidth(dims.width);
                 setHeight(dims.height);
-                setSourceBytes(await fileToUint8Array(source));
+                setSourceBytes(bytes);
             } catch (err) {
+                if (!isCurrent()) return;
                 setError(
                     `Failed to load image: ${err instanceof Error ? err.message : String(err)}`,
                 );
@@ -110,23 +123,25 @@ export default function ImageCompressor() {
                 : { mode: 'filesize', targetKb: targetSize },
         [tabMode, width, height, outputFormat, quality, targetSize],
     );
-    const liveSettings = useDebouncedValue(settings, LIVE_UPDATE_DELAY_MS);
+    const debouncedSettings = useDebouncedValue(settings, LIVE_UPDATE_DELAY_MS);
     // Editing is still in flight while the debounced copy lags the live one
-    const settled = liveSettings === settings;
+    const settled = debouncedSettings === settings;
     const originalFormat = originalInfo?.format ?? null;
 
     // Recompress whenever the image or its settled settings change
     useEffect(() => {
-        if (!sourceBytes || !settled || !areSettingsCompressible(settings))
+        if (!sourceBytes || !settled || !areSettingsCompressible(settings)) {
+            setCompressing(false);
             return;
+        }
 
         let cancelled = false;
         setCompressing(true);
+        setError(null);
 
         compress(sourceBytes, settings, originalFormat)
             .then((result) => {
                 if (cancelled) return;
-                setError(null);
                 setCompressed({
                     previewUrl: URL.createObjectURL(result.blob),
                     ...result,

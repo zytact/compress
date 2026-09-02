@@ -23,9 +23,14 @@ export function compress(
     const instance = getWorker();
 
     return new Promise((resolve, reject) => {
+        const stopListening = () => {
+            instance.removeEventListener('message', onMessage);
+            instance.removeEventListener('error', onError);
+        };
+
         const onMessage = ({ data }: MessageEvent<CompressResponse>) => {
             if (data.id !== id) return;
-            instance.removeEventListener('message', onMessage);
+            stopListening();
             if (data.ok) {
                 const { blob, format, width, height } = data;
                 resolve({ blob, format, width, height });
@@ -34,7 +39,15 @@ export function compress(
             }
         };
 
+        // A worker that dies never answers, so fail the request with it
+        const onError = (event: ErrorEvent) => {
+            stopListening();
+            worker = null;
+            reject(new Error(event.message || 'Compression worker failed'));
+        };
+
         instance.addEventListener('message', onMessage);
+        instance.addEventListener('error', onError);
         instance.postMessage({ id, source, settings, originalFormat });
     });
 }
