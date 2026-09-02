@@ -1,3 +1,5 @@
+import { NumberInput } from './number-input';
+
 interface FilesizeSettingsProps {
     targetSize: number;
     onTargetSizeChange: (value: number) => void;
@@ -12,12 +14,9 @@ export function FilesizeSettings({
             <label className="block text-sm font-medium mb-2">
                 Target File Size (KB)
             </label>
-            <input
-                type="number"
+            <NumberInput
                 value={targetSize}
-                onChange={(e) =>
-                    onTargetSizeChange(parseInt(e.target.value) || 0)
-                }
+                onValueChange={onTargetSizeChange}
                 className="w-full px-3 py-2 border border-input rounded-lg bg-background"
             />
             <p className="mt-2 text-sm text-muted-foreground">
