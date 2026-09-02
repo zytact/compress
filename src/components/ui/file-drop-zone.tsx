@@ -36,6 +36,8 @@ export function FileDropzone({
             <input
                 ref={fileInputRef}
                 type="file"
+                name="image"
+                aria-label="Choose image"
                 accept={accept}
                 onChange={(e) =>
                     e.target.files?.[0] && onFileSelect(e.target.files[0])

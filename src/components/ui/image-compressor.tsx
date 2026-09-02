@@ -1,13 +1,13 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FileDropzone } from './file-drop-zone';
 import { ModeTabs } from './mode-tabs';
 import { DimensionsSettings } from './dimension-settings';
 import { FilesizeSettings } from './file-size-settings';
-import { PrimaryAction } from './primary-action';
 import { ErrorBanner } from './error-banner';
 import { PreviewPane } from './preview-pane';
+import type { PreviewStatus } from './compressed-preview';
 import type { ImageInfo } from '@/lib/wasm';
 import {
     OutputFormat,
@@ -24,6 +24,7 @@ import {
 } from '@/lib/wasm';
 
 type TabMode = 'dimensions' | 'filesize';
+const LIVE_UPDATE_DELAY_MS = 300;
 
 export default function ImageCompressor() {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -37,7 +38,8 @@ export default function ImageCompressor() {
         width: number;
         height: number;
     } | null>(null);
-    const [loading, setLoading] = useState(false);
+    const [sourceData, setSourceData] = useState<Uint8Array | null>(null);
+    const [previewStatus, setPreviewStatus] = useState<PreviewStatus>('idle');
     const [error, setError] = useState<string | null>(null);
     const [tabMode, setTabMode] = useState<TabMode>('dimensions');
 
@@ -52,19 +54,57 @@ export default function ImageCompressor() {
 
     const compressedBlobRef = useRef<Blob | null>(null);
     const compressedFormatRef = useRef<OutputFormat>(OutputFormat.Jpeg);
-    const convertedHeicBlobRef = useRef<Blob | null>(null);
+    const originalPreviewRef = useRef<string | null>(null);
+    const compressedPreviewRef = useRef<string | null>(null);
+    const fileSelectionIdRef = useRef(0);
+    const compressionIdRef = useRef(0);
+
+    const replaceOriginalPreview = useCallback((url: string | null) => {
+        if (originalPreviewRef.current) {
+            URL.revokeObjectURL(originalPreviewRef.current);
+        }
+        originalPreviewRef.current = url;
+        setOriginalPreview(url);
+    }, []);
+
+    const replaceCompressedPreview = useCallback((url: string | null) => {
+        if (compressedPreviewRef.current) {
+            URL.revokeObjectURL(compressedPreviewRef.current);
+        }
+        compressedPreviewRef.current = url;
+        setCompressedPreview(url);
+    }, []);
+
+    useEffect(
+        () => () => {
+            if (originalPreviewRef.current) {
+                URL.revokeObjectURL(originalPreviewRef.current);
+            }
+            if (compressedPreviewRef.current) {
+                URL.revokeObjectURL(compressedPreviewRef.current);
+            }
+        },
+        [],
+    );
 
     const handleFileSelect = useCallback(
         async (file: File) => {
+            const selectionId = ++fileSelectionIdRef.current;
+            compressionIdRef.current += 1;
             setError(null);
             setSelectedFile(file);
-            setCompressedPreview(null);
+            setSourceData(null);
+            setPreviewStatus('loading');
+            replaceOriginalPreview(null);
+            replaceCompressedPreview(null);
             setCompressedInfo(null);
-            convertedHeicBlobRef.current = null;
+            setOriginalInfo(null);
+            compressedBlobRef.current = null;
 
+            let previewUrl: string | null = null;
             try {
                 const format = inferFormatFromFilename(file.name);
-                let previewUrl: string;
+                let sourceFile: File = file;
 
                 // If HEIC, attempt browser-native conversion to JPEG
                 if (format === 'HEIC') {
@@ -75,7 +115,9 @@ export default function ImageCompressor() {
 
                     try {
                         const convertedBlob = await convertHeicToJpeg(file);
-                        convertedHeicBlobRef.current = convertedBlob;
+                        sourceFile = new File([convertedBlob], file.name, {
+                            type: convertedBlob.type,
+                        });
                         previewUrl = URL.createObjectURL(convertedBlob);
                     } catch (conversionError) {
                         throw new Error(
@@ -86,9 +128,17 @@ export default function ImageCompressor() {
                     previewUrl = URL.createObjectURL(file);
                 }
 
-                setOriginalPreview(previewUrl);
+                const [browserDims, data] = await Promise.all([
+                    getImageDimensionsFromUrl(previewUrl),
+                    fileToUint8Array(sourceFile),
+                ]);
 
-                const browserDims = await getImageDimensionsFromUrl(previewUrl);
+                if (selectionId !== fileSelectionIdRef.current) {
+                    URL.revokeObjectURL(previewUrl);
+                    return;
+                }
+
+                replaceOriginalPreview(previewUrl);
 
                 const imgWidth = browserDims.width;
                 const imgHeight = browserDims.height;
@@ -105,116 +155,135 @@ export default function ImageCompressor() {
                 setOriginalInfo(info);
                 setWidth(imgWidth);
                 setHeight(imgHeight);
+                setSourceData(data);
             } catch (err) {
+                if (previewUrl) URL.revokeObjectURL(previewUrl);
+                if (selectionId !== fileSelectionIdRef.current) return;
+                setPreviewStatus('idle');
                 setError(
                     `Failed to load image: ${err instanceof Error ? err.message : String(err)}`,
                 );
             }
         },
-        [outputFormat],
+        [outputFormat, replaceCompressedPreview, replaceOriginalPreview],
     );
 
-    const handleCompress = async () => {
-        if (!selectedFile) return;
+    useEffect(() => {
+        if (!sourceData || !originalInfo) return;
 
-        setLoading(true);
+        const hasValidSettings =
+            tabMode === 'dimensions' ? width > 0 && height > 0 : targetSize > 0;
+        if (!hasValidSettings) {
+            compressionIdRef.current += 1;
+            setPreviewStatus('idle');
+            return;
+        }
+
+        const compressionId = ++compressionIdRef.current;
+        setPreviewStatus('waiting');
         setError(null);
 
-        try {
-            // Use converted HEIC blob if available, otherwise use original file
-            const sourceBlob = convertedHeicBlobRef.current || selectedFile;
-            const data = await fileToUint8Array(
-                sourceBlob instanceof Blob && !(sourceBlob instanceof File)
-                    ? new File([sourceBlob], selectedFile.name, {
-                          type: sourceBlob.type,
-                      })
-                    : sourceBlob,
-            );
-            let result: Uint8Array;
-            let actualFormat: OutputFormat;
+        const timeout = window.setTimeout(() => {
+            const compress = async () => {
+                setPreviewStatus('processing');
 
-            if (tabMode === 'dimensions') {
-                // Handle OutputFormat.Original by using the actual original format
-                let effectiveFormat = outputFormat;
-                if (
-                    outputFormat === OutputFormat.Original &&
-                    originalInfo?.format
-                ) {
-                    const origFormat = originalInfo.format.toUpperCase();
-                    // HEIC is converted to JPEG, so treat as JPEG
-                    if (
-                        origFormat === 'JPEG' ||
-                        origFormat === 'JPG' ||
-                        origFormat === 'HEIC'
-                    ) {
-                        effectiveFormat = OutputFormat.Jpeg;
-                    } else if (origFormat === 'PNG') {
-                        effectiveFormat = OutputFormat.Png;
+                try {
+                    let result: Uint8Array;
+                    let actualFormat: OutputFormat;
+
+                    if (tabMode === 'dimensions') {
+                        let effectiveFormat = outputFormat;
+                        if (outputFormat === OutputFormat.Original) {
+                            const originalFormat =
+                                originalInfo.format.toUpperCase();
+                            effectiveFormat =
+                                originalFormat === 'PNG'
+                                    ? OutputFormat.Png
+                                    : OutputFormat.Jpeg;
+                        }
+
+                        result = await resizeByDimensions(sourceData, {
+                            width,
+                            height,
+                            format: effectiveFormat,
+                            quality,
+                        });
+                        actualFormat = effectiveFormat;
                     } else {
-                        // Default to JPEG for unsupported formats
-                        effectiveFormat = OutputFormat.Jpeg;
+                        result = await resizeByFilesize(sourceData, {
+                            targetBytes: targetSize * 1024,
+                            floorQuality: 30,
+                            ceilQuality: 95,
+                            tolerancePercent: 0,
+                        });
+                        actualFormat = OutputFormat.Jpeg;
                     }
+
+                    const mimeType = getMimeType(actualFormat);
+                    const blob = uint8ArrayToBlob(result, mimeType);
+                    const previewUrl = URL.createObjectURL(blob);
+                    const dimensions =
+                        await getImageDimensionsFromUrl(previewUrl);
+
+                    if (compressionId !== compressionIdRef.current) {
+                        URL.revokeObjectURL(previewUrl);
+                        return;
+                    }
+
+                    compressedBlobRef.current = blob;
+                    compressedFormatRef.current = actualFormat;
+                    replaceCompressedPreview(previewUrl);
+                    setCompressedInfo({
+                        size: blob.size,
+                        width: dimensions.width,
+                        height: dimensions.height,
+                    });
+                    setPreviewStatus('ready');
+                } catch (err) {
+                    if (compressionId !== compressionIdRef.current) return;
+                    setPreviewStatus('idle');
+                    setError(
+                        `Compression failed: ${err instanceof Error ? err.message : String(err)}`,
+                    );
                 }
-
-                result = await resizeByDimensions(data, {
-                    width,
-                    height,
-                    format: effectiveFormat,
-                    quality,
-                });
-                actualFormat = effectiveFormat;
-            } else {
-                result = await resizeByFilesize(data, {
-                    targetBytes: targetSize * 1024,
-                    floorQuality: 30,
-                    ceilQuality: 95,
-                    tolerancePercent: 0,
-                });
-                actualFormat = OutputFormat.Jpeg;
-            }
-
-            const mimeType = getMimeType(actualFormat);
-            const blob = uint8ArrayToBlob(result, mimeType);
-            compressedBlobRef.current = blob;
-            compressedFormatRef.current = actualFormat;
-
-            const previewUrl = URL.createObjectURL(blob);
-            setCompressedPreview(previewUrl);
-
-            const img = new Image();
-            img.onload = () => {
-                setCompressedInfo({
-                    size: blob.size,
-                    width: img.width,
-                    height: img.height,
-                });
-                URL.revokeObjectURL(previewUrl);
             };
-            img.src = previewUrl;
-        } catch (err) {
-            setError(
-                `Compression failed: ${err instanceof Error ? err.message : String(err)}`,
-            );
-        } finally {
-            setLoading(false);
-        }
-    };
+
+            void compress();
+        }, LIVE_UPDATE_DELAY_MS);
+
+        return () => {
+            window.clearTimeout(timeout);
+            if (compressionIdRef.current === compressionId) {
+                compressionIdRef.current += 1;
+            }
+        };
+    }, [
+        height,
+        originalInfo,
+        outputFormat,
+        quality,
+        replaceCompressedPreview,
+        sourceData,
+        tabMode,
+        targetSize,
+        width,
+    ]);
 
     const handleDownload = () => {
         if (!compressedBlobRef.current || !selectedFile) return;
 
         const url = URL.createObjectURL(compressedBlobRef.current);
-        const a = document.createElement('a');
-        a.href = url;
+        const downloadLink = document.createElement('a');
+        downloadLink.href = url;
 
         // Use the actual format that was used during compression
         const newExtension = getFileExtension(compressedFormatRef.current);
         const downloadFilename = `compressed_${replaceFileExtension(selectedFile.name, newExtension)}`;
 
-        a.download = downloadFilename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        downloadLink.download = downloadFilename;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
         URL.revokeObjectURL(url);
     };
 
@@ -230,7 +299,7 @@ export default function ImageCompressor() {
                 </p>
             </div>
 
-            <FileDropzone onFileSelect={handleFileSelect} disabled={loading} />
+            <FileDropzone onFileSelect={handleFileSelect} />
 
             {error && <ErrorBanner message={error} />}
 
@@ -262,11 +331,9 @@ export default function ImageCompressor() {
                             />
                         )}
 
-                        <PrimaryAction
-                            onClick={handleCompress}
-                            loading={loading}
-                            disabled={!selectedFile}
-                        />
+                        <p className="text-sm text-muted-foreground">
+                            Changes update the preview automatically.
+                        </p>
                     </div>
 
                     <PreviewPane
@@ -278,6 +345,7 @@ export default function ImageCompressor() {
                             previewUrl: compressedPreview,
                             info: compressedInfo,
                             originalSize: originalInfo?.size_bytes,
+                            status: previewStatus,
                         }}
                         onDownload={handleDownload}
                     />

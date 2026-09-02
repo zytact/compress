@@ -5,8 +5,8 @@ export const Route = createFileRoute('/')({ component: App });
 
 function App() {
     return (
-        <div className="relative">
+        <main className="relative">
             <ImageCompressor />
-        </div>
+        </main>
     );
 }

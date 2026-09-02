@@ -90,11 +90,16 @@ export function DimensionsSettings({
         <>
             <div className="grid grid-cols-2 gap-4">
                 <div>
-                    <label className="block text-sm font-medium mb-2">
+                    <label
+                        htmlFor="width"
+                        className="block text-sm font-medium mb-2"
+                    >
                         Width (px)
                     </label>
                     <input
                         type="number"
+                        id="width"
+                        name="width"
                         value={width}
                         min={1}
                         max={originalWidth ?? undefined}
@@ -114,11 +119,16 @@ export function DimensionsSettings({
                     )}
                 </div>
                 <div>
-                    <label className="block text-sm font-medium mb-2">
+                    <label
+                        htmlFor="height"
+                        className="block text-sm font-medium mb-2"
+                    >
                         Height (px)
                     </label>
                     <input
                         type="number"
+                        id="height"
+                        name="height"
                         value={height}
                         min={1}
                         max={originalHeight ?? undefined}
@@ -140,15 +150,18 @@ export function DimensionsSettings({
             </div>
 
             <div>
-                <label className="block text-sm font-medium mb-2">
+                <label
+                    htmlFor="output-format"
+                    className="block text-sm font-medium mb-2"
+                >
                     Output Format
                 </label>
                 <select
+                    id="output-format"
+                    name="output-format"
                     value={outputFormat}
                     onChange={(e) =>
-                        onOutputFormatChange(
-                            parseInt(e.target.value) as OutputFormat,
-                        )
+                        onOutputFormatChange(parseInt(e.target.value))
                     }
                     className="w-full px-3 py-2 border border-input rounded-lg bg-background"
                 >
@@ -168,7 +181,10 @@ export function DimensionsSettings({
                     originalFormat === 'PNG'
                 ) && (
                     <div>
-                        <label className="block text-sm font-medium mb-2">
+                        <label
+                            id="quality-label"
+                            className="block text-sm font-medium mb-2"
+                        >
                             Quality: {quality}%
                         </label>
                         <Slider
@@ -176,6 +192,7 @@ export function DimensionsSettings({
                             max={100}
                             step={1}
                             value={[quality]}
+                            aria-labelledby="quality-label"
                             onValueChange={(values) =>
                                 onQualityChange(values[0])
                             }

@@ -10,6 +10,7 @@ export function ModeTabs({ value, onChange }: ModeTabsProps) {
         <div className="border-b border-border">
             <div className="flex gap-4">
                 <button
+                    type="button"
                     onClick={() => onChange('dimensions')}
                     className={`px-4 py-2 font-medium border-b-2 transition-colors ${
                         value === 'dimensions'
@@ -20,6 +21,7 @@ export function ModeTabs({ value, onChange }: ModeTabsProps) {
                     By Dimensions
                 </button>
                 <button
+                    type="button"
                     onClick={() => onChange('filesize')}
                     className={`px-4 py-2 font-medium border-b-2 transition-colors ${
                         value === 'filesize'

@@ -9,7 +9,7 @@ interface OriginalPreviewProps {
 export function OriginalPreview({ previewUrl, info }: OriginalPreviewProps) {
     return (
         <div className="space-y-3">
-            <h3 className="text-lg font-semibold">Original</h3>
+            <h2 className="text-lg font-semibold">Original</h2>
             {previewUrl && (
                 <div className="border border-border rounded-lg overflow-hidden">
                     <img

@@ -1,5 +1,6 @@
 import { OriginalPreview } from './original-preview';
 import { CompressedPreview } from './compressed-preview';
+import type { PreviewStatus } from './compressed-preview';
 import type { ImageInfo } from '@/lib/wasm';
 
 interface CompressedInfo {
@@ -17,6 +18,7 @@ interface PreviewPaneProps {
         previewUrl: string | null;
         info: CompressedInfo | null;
         originalSize?: number;
+        status: PreviewStatus;
     };
     onDownload: () => void;
 }
@@ -36,6 +38,7 @@ export function PreviewPane({
                 previewUrl={compressed.previewUrl}
                 info={compressed.info}
                 originalSize={compressed.originalSize}
+                status={compressed.status}
                 onDownload={onDownload}
             />
         </div>

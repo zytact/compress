@@ -9,11 +9,16 @@ export function FilesizeSettings({
 }: FilesizeSettingsProps) {
     return (
         <div>
-            <label className="block text-sm font-medium mb-2">
+            <label
+                htmlFor="target-size"
+                className="block text-sm font-medium mb-2"
+            >
                 Target File Size (KB)
             </label>
             <input
                 type="number"
+                id="target-size"
+                name="target-size"
                 value={targetSize}
                 onChange={(e) =>
                     onTargetSizeChange(parseInt(e.target.value) || 0)
