@@ -4,9 +4,5 @@ import ImageCompressor from '@/components/ui/image-compressor';
 export const Route = createFileRoute('/')({ component: App });
 
 function App() {
-    return (
-        <div className="relative">
-            <ImageCompressor />
-        </div>
-    );
+    return <ImageCompressor />;
 }

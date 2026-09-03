@@ -4,8 +4,11 @@ interface ErrorBannerProps {
 
 export function ErrorBanner({ message }: ErrorBannerProps) {
     return (
-        <div className="bg-destructive/10 border border-destructive rounded-lg p-4 text-destructive-foreground">
+        <p
+            role="alert"
+            className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+        >
             {message}
-        </div>
+        </p>
     );
 }

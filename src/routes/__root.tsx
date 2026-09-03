@@ -5,6 +5,7 @@ import { TanStackDevtools } from '@tanstack/react-devtools';
 import appCss from '../styles.css?url';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ModeToggle } from '@/components/ui/mode-toggle';
+import { Wordmark } from '@/components/ui/wordmark';
 
 export const Route = createRootRoute({
     head: () => ({
@@ -36,6 +37,16 @@ export const Route = createRootRoute({
             { name: 'twitter:image', content: '/og-image.png' },
         ],
         links: [
+            { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+            {
+                rel: 'preconnect',
+                href: 'https://fonts.gstatic.com',
+                crossOrigin: 'anonymous',
+            },
+            {
+                rel: 'stylesheet',
+                href: 'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap',
+            },
             {
                 rel: 'stylesheet',
                 href: appCss,
@@ -52,70 +63,47 @@ function RootDocument({ children }: { children: React.ReactNode }) {
             <head>
                 <HeadContent />
             </head>
-            <body className="flex flex-col min-h-screen">
+            <body className="flex min-h-screen flex-col">
                 <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
-                    <div className="absolute top-2 right-2 z-50 flex flex-col md:flex-row items-center gap-3">
+                    <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
                         <a
-                            href="https://github.com/zytact/compress"
-                            aria-label="View source on GitHub"
-                            title="View Source Code"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="md:inline-block hidden"
+                            href="/"
+                            className="rounded-sm text-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                         >
-                            {/* Light theme icon */}
-                            <img
-                                src="/GitHub_light.svg"
-                                alt="GitHub"
-                                className="h-6 w-6 block dark:hidden"
-                            />
-                            {/* Dark theme icon */}
-                            <img
-                                src="/GitHub_dark.svg"
-                                alt="GitHub"
-                                className="h-6 w-6 hidden dark:block"
-                            />
+                            <Wordmark />
                         </a>
-                        <ModeToggle />
-                        <a
-                            href="https://github.com/zytact/compress"
-                            aria-label="View source on GitHub"
-                            title="View Source Code"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-block md:hidden"
-                        >
-                            {/* Light theme icon */}
-                            <img
-                                src="/GitHub_light.svg"
-                                alt="GitHub"
-                                className="h-6 w-6 block dark:hidden"
-                            />
-                            {/* Dark theme icon */}
-                            <img
-                                src="/GitHub_dark.svg"
-                                alt="GitHub"
-                                className="h-6 w-6 hidden dark:block"
-                            />
-                        </a>
-                    </div>
-                    <div className="flex-1">{children}</div>
-                    <footer className="py-4 text-center text-sm text-foreground/80">
-                        <span>
-                            Made with{' '}
-                            <span className="text-red-500" aria-label="love">
-                                ❤️
-                            </span>{' '}
-                            by{' '}
-                        </span>
+                        <div className="flex items-center gap-3">
+                            <a
+                                href="https://github.com/zytact/compress"
+                                aria-label="View source on GitHub"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            >
+                                <img
+                                    src="/GitHub_light.svg"
+                                    alt=""
+                                    className="block size-5 dark:hidden"
+                                />
+                                <img
+                                    src="/GitHub_dark.svg"
+                                    alt=""
+                                    className="hidden size-5 dark:block"
+                                />
+                            </a>
+                            <ModeToggle />
+                        </div>
+                    </header>
+                    <main className="flex-1">{children}</main>
+                    <footer className="py-6 text-center text-sm text-muted-foreground">
+                        Made with ❤️ by{' '}
                         <a
                             href="https://zytact.com"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="font-medium text-foreground hover:text-foreground transition-colors"
-                            aria-label="Visit Arnab's website"
+                            className="font-medium text-foreground underline-offset-4 hover:underline"
                         >
-                            <b>Arnab</b>
+                            Arnab
                         </a>
                     </footer>
                 </ThemeProvider>

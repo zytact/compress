@@ -1,29 +1,32 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Download } from 'lucide-react';
+
 import { FileDropzone } from './file-drop-zone';
-import { ModeTabs } from './mode-tabs';
-import { DimensionsSettings } from './dimension-settings';
-import { FilesizeSettings } from './file-size-settings';
+import { SettingsPanel } from './settings-panel';
 import { ErrorBanner } from './error-banner';
-import { PreviewPane } from './preview-pane';
+import { ImageCompare } from './image-compare';
+import { ByteBar } from './byte-bar';
+import { Button } from './button';
 import type { ImageInfo } from '@/lib/wasm';
 import type { CompressionSettings } from '@/lib/compress';
+import type { FitOutcome } from '@/lib/compression-notice';
 import { areSettingsCompressible } from '@/lib/compress';
-import { describeCompression } from '@/lib/compression-notice';
-import { compress } from '@/lib/compress-client';
+import { describeCompression, describeFit } from '@/lib/compression-notice';
+import { compress, fitQuality } from '@/lib/compress-client';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { cn } from '@/lib/utils';
 import {
     OutputFormat,
     convertHeicToJpeg,
     fileToUint8Array,
+    formatBytes,
     getFileExtension,
     getImageDimensionsFromUrl,
     inferFormatFromFilename,
     replaceFileExtension,
 } from '@/lib/wasm';
-
-type TabMode = 'dimensions' | 'filesize';
 
 interface CompressedState {
     previewUrl: string;
@@ -45,85 +48,91 @@ export default function ImageCompressor() {
     const [compressed, setCompressed] = useState<CompressedState | null>(null);
     const [compressing, setCompressing] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [tabMode, setTabMode] = useState<TabMode>('dimensions');
 
-    const [width, setWidth] = useState<number>(1920);
-    const [height, setHeight] = useState<number>(1080);
+    const [width, setWidth] = useState(0);
     const [outputFormat, setOutputFormat] = useState<OutputFormat>(
-        OutputFormat.Jpeg,
+        OutputFormat.Original,
     );
-    const [quality, setQuality] = useState<number>(85);
+    const [quality, setQuality] = useState(85);
 
-    const [targetSize, setTargetSize] = useState<number>(500);
+    const [targetKb, setTargetKb] = useState(500);
+    const [fitting, setFitting] = useState(false);
+    const [fit, setFit] = useState<FitOutcome | null>(null);
 
     const selectionRef = useRef(0);
+    const fitAttemptRef = useRef(0);
 
-    const handleFileSelect = useCallback(
-        async (file: File) => {
-            // Loading a file takes several awaits, and a newer pick wins them all
-            const selection = ++selectionRef.current;
-            const isCurrent = () => selectionRef.current === selection;
+    const invalidateFit = () => {
+        fitAttemptRef.current++;
+    };
 
-            setError(null);
-            setSelectedFile(file);
-            setSourceBytes(null);
-            setCompressed(null);
-            setOriginalPreview(null);
-            setOriginalInfo(null);
+    const handleFileSelect = useCallback(async (file: File) => {
+        // Loading a file takes several awaits, and a newer pick wins them all
+        const selection = ++selectionRef.current;
+        const isCurrent = () => selectionRef.current === selection;
 
-            try {
-                const format = inferFormatFromFilename(file.name);
-                let source: Blob = file;
+        setError(null);
+        invalidateFit();
+        setFit(null);
+        setSelectedFile(file);
+        setSourceBytes(null);
+        setCompressed(null);
+        setOriginalPreview(null);
+        setOriginalInfo(null);
 
-                // HEIC cannot be decoded by the WASM encoder, so convert it first
-                if (format === 'HEIC') {
-                    if (outputFormat === OutputFormat.Original) {
-                        setOutputFormat(OutputFormat.Jpeg);
-                    }
-                    source = await convertHeicToJpeg(file);
-                }
+        try {
+            const format = inferFormatFromFilename(file.name);
+            let source: Blob = file;
 
-                const previewUrl = URL.createObjectURL(source);
-                const dims = await getImageDimensionsFromUrl(previewUrl);
-                const bytes = await fileToUint8Array(source);
-
-                if (!isCurrent()) {
-                    URL.revokeObjectURL(previewUrl);
-                    return;
-                }
-
-                setOriginalPreview(previewUrl);
-                setOriginalInfo({
-                    width: dims.width,
-                    height: dims.height,
-                    size_bytes: file.size,
-                    format,
-                });
-                setWidth(dims.width);
-                setHeight(dims.height);
-                setSourceBytes(bytes);
-            } catch (err) {
-                if (!isCurrent()) return;
-                setError(
-                    `Failed to load image: ${err instanceof Error ? err.message : String(err)}`,
+            // HEIC cannot be decoded by the WASM encoder, so convert it first
+            if (format === 'HEIC') {
+                setOutputFormat((current) =>
+                    current === OutputFormat.Original
+                        ? OutputFormat.Jpeg
+                        : current,
                 );
+                source = await convertHeicToJpeg(file);
             }
-        },
-        [outputFormat],
-    );
+
+            const previewUrl = URL.createObjectURL(source);
+            const dims = await getImageDimensionsFromUrl(previewUrl);
+            const bytes = await fileToUint8Array(source);
+
+            if (!isCurrent()) {
+                URL.revokeObjectURL(previewUrl);
+                return;
+            }
+
+            setOriginalPreview(previewUrl);
+            setOriginalInfo({
+                width: dims.width,
+                height: dims.height,
+                size_bytes: file.size,
+                format,
+            });
+            setWidth(dims.width);
+            setSourceBytes(bytes);
+        } catch (err) {
+            if (!isCurrent()) return;
+            setError(
+                `Could not open this image: ${err instanceof Error ? err.message : String(err)}`,
+            );
+        }
+    }, []);
+
+    const fitNote = describeFit(fit, { width, targetKb, quality });
+
+    const aspectRatio =
+        originalInfo && originalInfo.height > 0
+            ? originalInfo.width / originalInfo.height
+            : null;
+    const height = aspectRatio
+        ? Math.max(1, Math.round(width / aspectRatio))
+        : 0;
 
     const settings = useMemo<CompressionSettings>(
-        () =>
-            tabMode === 'dimensions'
-                ? {
-                      mode: 'dimensions',
-                      width,
-                      height,
-                      format: outputFormat,
-                      quality,
-                  }
-                : { mode: 'filesize', targetKb: targetSize },
-        [tabMode, width, height, outputFormat, quality, targetSize],
+        () => ({ width, height, format: outputFormat, quality }),
+        [width, height, outputFormat, quality],
     );
     const debouncedSettings = useDebouncedValue(settings, LIVE_UPDATE_DELAY_MS);
     // Editing is still in flight while the debounced copy lags the live one
@@ -187,86 +196,166 @@ export default function ImageCompressor() {
         return () => URL.revokeObjectURL(compressed.previewUrl);
     }, [compressed]);
 
+    const handleFit = async () => {
+        if (!sourceBytes || width <= 0) return;
+
+        invalidateFit();
+        const attempt = fitAttemptRef.current;
+
+        setFitting(true);
+        setError(null);
+        try {
+            const solved = await fitQuality(sourceBytes, {
+                width,
+                height,
+                targetBytes: targetKb * 1024,
+            });
+            if (fitAttemptRef.current !== attempt) return;
+            setQuality(solved);
+            setFit({ width, targetKb, quality: solved });
+        } catch (err) {
+            if (fitAttemptRef.current !== attempt) return;
+            setError(
+                `Could not fit to that size: ${err instanceof Error ? err.message : String(err)}`,
+            );
+        } finally {
+            if (fitAttemptRef.current === attempt) setFitting(false);
+        }
+    };
+
     const handleDownload = () => {
         if (!compressed || !selectedFile) return;
 
         const url = URL.createObjectURL(compressed.blob);
+        const named = replaceFileExtension(
+            selectedFile.name,
+            getFileExtension(compressed.format),
+        );
+        const dot = named.lastIndexOf('.');
         const a = document.createElement('a');
         a.href = url;
-        a.download = `compressed_${replaceFileExtension(selectedFile.name, getFileExtension(compressed.format))}`;
+        a.download = `${named.slice(0, dot)}-compressed${named.slice(dot)}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
     };
 
+    if (!selectedFile || !originalInfo || !originalPreview) {
+        return (
+            <div className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 sm:py-20">
+                <div className="max-w-xl space-y-4">
+                    <h1 className="font-display text-4xl leading-[1.05] font-extrabold tracking-tight text-balance sm:text-6xl">
+                        Make an image
+                        <br />
+                        smaller.
+                    </h1>
+                    <p className="max-w-md text-lg text-muted-foreground">
+                        Resize it, pick a format, and trade detail for bytes
+                        until it fits. Nothing is uploaded: your image is
+                        decoded and encoded in this tab.
+                    </p>
+                </div>
+
+                <div className="mt-10 max-w-2xl space-y-4">
+                    <FileDropzone onFileSelect={handleFileSelect} />
+                    {error && <ErrorBanner message={error} />}
+                </div>
+            </div>
+        );
+    }
+
+    const resultSize = compressed?.blob.size ?? null;
+
     return (
-        <div className="w-full max-w-6xl mx-auto p-6 space-y-6">
-            <div className="text-center space-y-2">
-                <h1 className="text-4xl font-bold tracking-tight">
-                    Image Compressor
-                </h1>
-                <p className="text-muted-foreground">
-                    Resize and compress images entirely in your browser using
-                    WebAssembly
+        <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                <p className="min-w-0 text-sm">
+                    <span className="block truncate font-medium">
+                        {selectedFile.name}
+                    </span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                        {originalInfo.width} × {originalInfo.height} ·{' '}
+                        {originalInfo.format} ·{' '}
+                        {formatBytes(originalInfo.size_bytes)}
+                    </span>
                 </p>
+                <FileDropzone compact onFileSelect={handleFileSelect} />
             </div>
 
-            <FileDropzone onFileSelect={handleFileSelect} />
-
-            {error && <ErrorBanner message={error} />}
-
-            {selectedFile && (
-                <>
-                    <ModeTabs value={tabMode} onChange={setTabMode} />
-
-                    <div className="bg-muted rounded-lg p-6 space-y-4">
-                        {tabMode === 'dimensions' ? (
-                            <DimensionsSettings
-                                width={width}
-                                height={height}
-                                originalWidth={originalInfo?.width ?? null}
-                                originalHeight={originalInfo?.height ?? null}
-                                outputFormat={outputFormat}
-                                quality={quality}
-                                originalFormat={originalFormat}
-                                onDimensionsChange={(w, h) => {
-                                    setWidth(w);
-                                    setHeight(h);
-                                }}
-                                onOutputFormatChange={setOutputFormat}
-                                onQualityChange={setQuality}
-                            />
-                        ) : (
-                            <FilesizeSettings
-                                targetSize={targetSize}
-                                onTargetSizeChange={setTargetSize}
-                            />
-                        )}
-                    </div>
-
-                    <PreviewPane
-                        original={{
-                            previewUrl: originalPreview,
-                            info: originalInfo,
-                        }}
-                        compressed={{
-                            previewUrl: compressed?.previewUrl ?? null,
-                            info: compressed
-                                ? {
-                                      size: compressed.blob.size,
-                                      width: compressed.width,
-                                      height: compressed.height,
-                                  }
-                                : null,
-                            originalSize: originalInfo?.size_bytes,
-                            notice,
-                            updating: compressing || !settled,
-                        }}
-                        onDownload={handleDownload}
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+                <div className="space-y-5">
+                    <ImageCompare
+                        originalUrl={originalPreview}
+                        resultUrl={compressed?.previewUrl ?? null}
+                        updating={compressing || !settled}
                     />
-                </>
-            )}
+
+                    <ByteBar
+                        originalSize={originalInfo.size_bytes}
+                        resultSize={resultSize}
+                    />
+
+                    {error && <ErrorBanner message={error} />}
+
+                    {notice && (
+                        <div
+                            className={cn(
+                                'space-y-1 rounded-lg border p-3 text-sm',
+                                notice.tone === 'warning'
+                                    ? 'border-signal/40 bg-signal-soft'
+                                    : 'border-border bg-muted',
+                            )}
+                        >
+                            <p className="font-medium">{notice.message}</p>
+                            <p className="text-muted-foreground">
+                                {notice.advice}
+                            </p>
+                        </div>
+                    )}
+                </div>
+
+                <div className="space-y-4">
+                    <SettingsPanel
+                        originalWidth={originalInfo.width}
+                        originalFormat={originalFormat}
+                        width={width}
+                        height={height}
+                        onWidthChange={(next) => {
+                            invalidateFit();
+                            setWidth(next);
+                        }}
+                        format={outputFormat}
+                        onFormatChange={setOutputFormat}
+                        quality={quality}
+                        onQualityChange={setQuality}
+                        targetKb={targetKb}
+                        onTargetKbChange={(next) => {
+                            invalidateFit();
+                            setTargetKb(next);
+                        }}
+                        onFit={handleFit}
+                        fitting={fitting}
+                        fitNote={fitNote}
+                    />
+
+                    <Button
+                        size="lg"
+                        onClick={handleDownload}
+                        disabled={!compressed}
+                        className="w-full"
+                    >
+                        <Download />
+                        {resultSize === null
+                            ? 'Download'
+                            : `Download ${formatBytes(resultSize)}`}
+                    </Button>
+
+                    <p className="text-center text-xs text-muted-foreground">
+                        Nothing leaves this tab.
+                    </p>
+                </div>
+            </div>
         </div>
     );
 }
