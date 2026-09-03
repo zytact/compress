@@ -1,5 +1,10 @@
-import type { CompressionResult, CompressionSettings } from './compress';
-import type { CompressResponse } from './compress.worker';
+import type {
+    CompressionResult,
+    CompressionSettings,
+    FitRequest,
+} from './compress';
+import type { CompressRequest, CompressResponse } from './compress.worker';
+import type { SourceFormat } from './wasm';
 
 // Compression runs off the main thread so live preview updates never freeze the
 // page while WASM encodes.
@@ -13,12 +18,11 @@ function getWorker(): Worker {
     return worker;
 }
 
-/** Compresses one image in the worker and resolves with the encoded result. */
-export function compress(
-    source: Uint8Array,
-    settings: CompressionSettings,
-    originalFormat: string | null,
-): Promise<CompressionResult> {
+type Succeeded = Extract<CompressResponse, { ok: true }>;
+
+function request<TKind extends CompressRequest['kind']>(
+    build: (id: number) => Extract<CompressRequest, { kind: TKind }>,
+): Promise<Extract<Succeeded, { kind: TKind }>> {
     const id = nextRequestId++;
     const instance = getWorker();
 
@@ -31,12 +35,11 @@ export function compress(
         const onMessage = ({ data }: MessageEvent<CompressResponse>) => {
             if (data.id !== id) return;
             stopListening();
-            if (data.ok) {
-                const { blob, format, width, height, keptOriginal } = data;
-                resolve({ blob, format, width, height, keptOriginal });
-            } else {
+            if (!data.ok) {
                 reject(new Error(data.error));
+                return;
             }
+            resolve(data as Extract<Succeeded, { kind: TKind }>);
         };
 
         // A worker that dies never answers, so fail the request with it
@@ -48,6 +51,37 @@ export function compress(
 
         instance.addEventListener('message', onMessage);
         instance.addEventListener('error', onError);
-        instance.postMessage({ id, source, settings, originalFormat });
+        instance.postMessage(build(id));
     });
+}
+
+/** Compresses one image in the worker and resolves with the encoded result. */
+export async function compress(
+    source: Uint8Array,
+    settings: CompressionSettings,
+    originalFormat: SourceFormat | null,
+): Promise<CompressionResult> {
+    const { blob, format, width, height, keptOriginal } = await request(
+        (id) => ({
+            id,
+            kind: 'compress',
+            source,
+            settings,
+            originalFormat,
+        }),
+    );
+    return { blob, format, width, height, keptOriginal };
+}
+
+export async function fitQuality(
+    source: Uint8Array,
+    fit: FitRequest,
+): Promise<number> {
+    const { quality } = await request((id) => ({
+        id,
+        kind: 'fit',
+        source,
+        request: fit,
+    }));
+    return quality;
 }

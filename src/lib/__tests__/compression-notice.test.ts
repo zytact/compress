@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { describeCompression } from '../compression-notice';
+import { describeCompression, describeFit } from '../compression-notice';
 import { OutputFormat } from '../wasm';
 
-const dimensions = {
-    mode: 'dimensions',
+const settings = {
     width: 100,
     height: 100,
     format: OutputFormat.Jpeg,
@@ -36,31 +35,57 @@ describe('describeCompression', () => {
                 outputSize: 400,
                 originalSize: 1000,
                 originalFormat: 'JPEG',
-                settings: dimensions,
+                settings,
             }),
         ).toBeNull();
     });
 
-    it('points at the target field when the file is already under it', () => {
-        const notice = describeCompression({
-            keptOriginal: true,
-            outputFormat: OutputFormat.Jpeg,
-            outputSize: 300 * 1024,
-            originalSize: 300 * 1024,
-            originalFormat: 'JPEG',
-            settings: { mode: 'filesize', targetKb: 500 },
-        });
+    it('names the dropped format and the live control values', () => {
+        const notice = describeCompression({ ...keptPng, settings });
 
         expect(notice?.tone).toBe('neutral');
-        expect(notice?.message).toContain('under your 500 KB target');
+        expect(notice?.message).toContain('as JPEG');
+        expect(notice?.message).toContain('your original PNG');
+        expect(notice?.advice).toBe(
+            'Lower the quality below 85, or the size below 100 x 100.',
+        );
+    });
+
+    it('never sends a PNG user to the hidden quality control', () => {
+        const notice = describeCompression({
+            ...keptPng,
+            outputFormat: OutputFormat.Jpeg,
+            originalFormat: 'JPEG',
+            settings: { ...settings, format: OutputFormat.Png },
+        });
+
+        expect(notice?.advice).toBe(
+            'Switch to JPEG to trade detail for bytes, or lower the size below 100 x 100.',
+        );
+    });
+
+    it('does not name a dropped format when none was dropped', () => {
+        const notice = describeCompression({
+            ...keptPng,
+            settings: { ...settings, format: OutputFormat.Png },
+        });
+
+        expect(notice?.message).not.toContain(' as ');
+    });
+
+    it('warns and names a target when a HEIC grew', () => {
+        const notice = describeCompression({ ...grownHeic, settings });
+
+        expect(notice?.tone).toBe('warning');
+        expect(notice?.advice).toContain('Fit to a size under 2048 KB');
     });
 
     it('suggests no target for a file too small to have one', () => {
         const notice = describeCompression({
-            ...keptPng,
-            outputSize: 1568,
+            ...grownHeic,
+            outputSize: 1600,
             originalSize: 1568,
-            settings: { mode: 'filesize', targetKb: 500 },
+            settings,
         });
 
         expect(notice?.advice).toBe(
@@ -68,49 +93,47 @@ describe('describeCompression', () => {
         );
     });
 
-    it('names the dropped format and the live control values', () => {
-        const notice = describeCompression({
-            ...keptPng,
-            settings: dimensions,
-        });
-
-        expect(notice?.tone).toBe('neutral');
-        expect(notice?.message).toContain('as JPEG');
-        expect(notice?.message).toContain('your original PNG');
-        expect(notice?.advice).toBe(
-            'Lower the quality below 85%, or the dimensions below 100 x 100.',
-        );
-    });
-
-    it('warns and names a target when a HEIC grew', () => {
-        const notice = describeCompression({
-            ...grownHeic,
-            settings: dimensions,
-        });
-
-        expect(notice?.tone).toBe('warning');
-        expect(notice?.advice).toContain(
-            'Switch to By File Size and ask for less than 2048 KB',
-        );
-    });
-
-    it('does not tell a filesize-mode user to switch to filesize mode', () => {
-        const notice = describeCompression({
-            ...grownHeic,
-            settings: { mode: 'filesize', targetKb: 5000 },
-        });
-
-        expect(notice?.tone).toBe('warning');
-        expect(notice?.advice).toContain('Lower the target below 2048 KB');
-        expect(notice?.advice).not.toContain('Switch to');
-    });
-
     it('says a dropped PNG would have been larger still on a grown HEIC', () => {
         const notice = describeCompression({
             ...grownHeic,
-            settings: { ...dimensions, format: OutputFormat.Png },
+            settings: { ...settings, format: OutputFormat.Png },
         });
 
         expect(notice?.message).toContain('The PNG you picked would be larger');
+    });
+});
+
+describe('describeFit', () => {
+    const solved = { width: 1200, targetKb: 120, quality: 62 };
+
+    it('explains the quality the search settled on', () => {
+        expect(describeFit(solved, solved)).toBe(
+            'Quality set to 62 to land just under 120 KB.',
+        );
+    });
+
+    it('goes quiet once any control it was solved for has moved', () => {
+        expect(describeFit(solved, { ...solved, width: 2400 })).toBeNull();
+        expect(describeFit(solved, { ...solved, targetKb: 500 })).toBeNull();
+        expect(describeFit(solved, { ...solved, quality: 63 })).toBeNull();
+    });
+
+    it('admits when it ran out of room at the quality floor', () => {
+        const note = describeFit(
+            { ...solved, quality: 30 },
+            { ...solved, quality: 30 },
+        );
+
+        expect(note).toContain('the lowest this goes');
+        expect(note).toContain('Reduce the width');
+    });
+
+    it('says there was room to spare at the ceiling', () => {
+        const note = describeFit(
+            { ...solved, quality: 95 },
+            { ...solved, quality: 95 },
+        );
+
+        expect(note).toContain('Even at its sharpest');
     });
 });

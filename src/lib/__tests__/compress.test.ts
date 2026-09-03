@@ -3,21 +3,30 @@ import {
     areSettingsCompressible,
     resolveOutputFormat,
     runCompression,
+    runFit,
+    usesQuality,
 } from '../compress';
-import { OutputFormat, resizeByDimensions, resizeByFilesize } from '../wasm';
+import { OutputFormat, fitToFilesize, resizeByDimensions } from '../wasm';
 import type * as WasmModule from '../wasm';
 
 // The encoders need WASM, so stub them and keep the real format helpers
 vi.mock('../wasm', async (importActual) => ({
     ...(await importActual<typeof WasmModule>()),
     resizeByDimensions: vi.fn(),
-    resizeByFilesize: vi.fn(),
+    fitToFilesize: vi.fn(),
 }));
 
 // jsdom has no createImageBitmap, and these tests only assert byte sizes
 vi.stubGlobal('createImageBitmap', () =>
     Promise.resolve({ width: 100, height: 100, close: () => {} }),
 );
+
+const settings = {
+    width: 100,
+    height: 100,
+    format: OutputFormat.Jpeg,
+    quality: 85,
+};
 
 describe('resolveOutputFormat', () => {
     it('keeps an explicitly requested format', () => {
@@ -27,7 +36,7 @@ describe('resolveOutputFormat', () => {
     });
 
     it('resolves Original to the source format', () => {
-        expect(resolveOutputFormat(OutputFormat.Original, 'png')).toBe(
+        expect(resolveOutputFormat(OutputFormat.Original, 'PNG')).toBe(
             OutputFormat.Png,
         );
         expect(resolveOutputFormat(OutputFormat.Original, 'JPEG')).toBe(
@@ -45,29 +54,22 @@ describe('resolveOutputFormat', () => {
     });
 });
 
-describe('areSettingsCompressible', () => {
-    it('rejects half-typed dimensions', () => {
-        expect(
-            areSettingsCompressible({
-                mode: 'dimensions',
-                width: 0,
-                height: 1080,
-                format: OutputFormat.Jpeg,
-                quality: 85,
-            }),
-        ).toBe(false);
+describe('usesQuality', () => {
+    it('is false only when the output really is a PNG', () => {
+        expect(usesQuality(OutputFormat.Png, 'JPEG')).toBe(false);
+        expect(usesQuality(OutputFormat.Original, 'PNG')).toBe(false);
+        expect(usesQuality(OutputFormat.Jpeg, 'PNG')).toBe(true);
+        expect(usesQuality(OutputFormat.Original, 'HEIC')).toBe(true);
     });
+});
 
-    it('rejects a zero target size', () => {
-        expect(areSettingsCompressible({ mode: 'filesize', targetKb: 0 })).toBe(
-            false,
-        );
+describe('areSettingsCompressible', () => {
+    it('rejects a half-typed size', () => {
+        expect(areSettingsCompressible({ ...settings, width: 0 })).toBe(false);
     });
 
     it('accepts usable settings', () => {
-        expect(
-            areSettingsCompressible({ mode: 'filesize', targetKb: 500 }),
-        ).toBe(true);
+        expect(areSettingsCompressible(settings)).toBe(true);
     });
 });
 
@@ -76,20 +78,6 @@ describe('runCompression never returns a larger file', () => {
 
     beforeEach(() => {
         vi.mocked(resizeByDimensions).mockReset();
-        vi.mocked(resizeByFilesize).mockReset();
-    });
-
-    it('keeps a source that is already under the target size', async () => {
-        const result = await runCompression(
-            source,
-            { mode: 'filesize', targetKb: 500 },
-            'PNG',
-        );
-
-        expect(resizeByFilesize).not.toHaveBeenCalled();
-        expect(result.keptOriginal).toBe(true);
-        expect(result.blob.size).toBe(source.length);
-        expect(result.format).toBe(OutputFormat.Png);
     });
 
     it('keeps the source when the requested format encodes larger', async () => {
@@ -97,13 +85,7 @@ describe('runCompression never returns a larger file', () => {
 
         const result = await runCompression(
             source,
-            {
-                mode: 'dimensions',
-                width: 100,
-                height: 100,
-                format: OutputFormat.Png,
-                quality: 85,
-            },
+            { ...settings, format: OutputFormat.Png },
             'JPEG',
         );
 
@@ -117,18 +99,33 @@ describe('runCompression never returns a larger file', () => {
 
         const result = await runCompression(
             source,
-            {
-                mode: 'dimensions',
-                width: 100,
-                height: 100,
-                format: OutputFormat.Png,
-                quality: 85,
-            },
+            { ...settings, format: OutputFormat.Png },
             'JPEG',
         );
 
         expect(result.keptOriginal).toBe(false);
         expect(result.blob.size).toBe(400);
         expect(result.format).toBe(OutputFormat.Png);
+    });
+});
+
+describe('runFit', () => {
+    it('searches at the requested size and returns the quality it found', async () => {
+        vi.mocked(fitToFilesize).mockResolvedValue({
+            data: new Uint8Array(400),
+            quality: 62,
+        });
+
+        const quality = await runFit(new Uint8Array(1000), {
+            width: 800,
+            height: 600,
+            targetBytes: 500 * 1024,
+        });
+
+        expect(quality).toBe(62);
+        expect(fitToFilesize).toHaveBeenCalledWith(
+            expect.anything(),
+            expect.objectContaining({ width: 800, height: 600 }),
+        );
     });
 });
