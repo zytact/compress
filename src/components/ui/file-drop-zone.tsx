@@ -60,7 +60,7 @@ export function FileDropzone({
                 const { files } = event.dataTransfer;
                 if (files.length > 0) onFileSelect(files[0]);
             }}
-            className={`w-full rounded-2xl border-2 border-dashed px-6 py-16 text-center transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
+            className={`w-full rounded-none border-2 border-dashed px-6 py-16 text-center transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
                 dragging
                     ? 'border-result bg-result-soft'
                     : 'border-border hover:border-muted-foreground'

@@ -40,7 +40,7 @@ export function ByteBar({ originalSize, resultSize }: ByteBarProps) {
             </div>
 
             <div
-                className="h-2 overflow-hidden rounded-full bg-source-soft"
+                className="h-2 overflow-hidden rounded-none bg-source-soft"
                 role="img"
                 aria-label={
                     resultSize === null
@@ -50,7 +50,7 @@ export function ByteBar({ originalSize, resultSize }: ByteBarProps) {
             >
                 <div
                     style={{ width: `${Math.min(100, ratio * 100)}%` }}
-                    className={`h-full rounded-full transition-[width] duration-300 ease-out ${
+                    className={`h-full rounded-none transition-[width] duration-300 ease-out ${
                         grew ? 'bg-signal' : 'bg-result'
                     }`}
                 />

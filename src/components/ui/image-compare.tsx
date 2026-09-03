@@ -49,7 +49,7 @@ export function ImageCompare({
             ref={frameRef}
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
-            className="relative touch-none overflow-hidden rounded-xl border border-border bg-muted select-none"
+            className="relative touch-none overflow-hidden rounded-none border border-border bg-muted select-none"
         >
             <img
                 src={originalUrl}
@@ -80,7 +80,7 @@ export function ImageCompare({
             {updating && (
                 <span
                     role="status"
-                    className="absolute inset-x-0 bottom-3 mx-auto flex w-fit items-center gap-2 rounded-full bg-background/85 px-3 py-1.5 text-xs font-medium backdrop-blur-sm"
+                    className="absolute inset-x-0 bottom-3 mx-auto flex w-fit items-center gap-2 rounded-none bg-background/85 px-3 py-1.5 text-xs font-medium backdrop-blur-sm"
                 >
                     <Loader2 className="size-3.5 animate-spin" />
                     Compressing
@@ -106,7 +106,7 @@ export function ImageCompare({
             >
                 <span className="absolute inset-y-0 left-1/2 w-[3px] -translate-x-1/2 bg-black/30" />
                 <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-source to-result" />
-                <span className="absolute top-1/2 left-1/2 flex size-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background shadow-lg group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-background">
+                <span className="absolute top-1/2 left-1/2 flex size-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-none border border-border bg-background shadow-lg group-focus-visible:ring-2 group-focus-visible:ring-ring group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-background">
                     <span className="h-3 w-px bg-source" />
                     <span className="mx-1 h-4 w-px bg-foreground/30" />
                     <span className="h-3 w-px bg-result" />
@@ -129,7 +129,7 @@ function Caption({
 }) {
     return (
         <span
-            className={`pointer-events-none absolute top-3 rounded-full bg-background/85 px-2.5 py-1 font-mono text-[0.6875rem] tracking-widest uppercase backdrop-blur-sm transition-opacity ${
+            className={`pointer-events-none absolute top-3 rounded-none bg-background/85 px-2.5 py-1 font-mono text-[0.6875rem] tracking-widest uppercase backdrop-blur-sm transition-opacity ${
                 side === 'left' ? 'left-3' : 'right-3'
             } ${tone === 'source' ? 'text-source' : 'text-result'} ${
                 hidden ? 'opacity-0' : 'opacity-100'

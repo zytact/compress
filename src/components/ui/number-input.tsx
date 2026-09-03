@@ -29,7 +29,7 @@ export function NumberInput({
         <input
             {...props}
             className={cn(
-                'w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm tabular-nums focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none',
+                'w-full rounded-none border border-input bg-background px-3 py-2 font-mono text-sm tabular-nums focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none',
                 className,
             )}
             type="text"
