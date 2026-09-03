@@ -109,6 +109,47 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
+const FitResultFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_fitresult_free(ptr >>> 0, 1));
+
+export class FitResult {
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(FitResult.prototype);
+        obj.__wbg_ptr = ptr;
+        FitResultFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        FitResultFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_fitresult_free(ptr, 0);
+    }
+    /**
+     * @returns {Uint8Array}
+     */
+    get data() {
+        const ret = wasm.fitresult_data(this.__wbg_ptr);
+        var v1 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+        wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+        return v1;
+    }
+    /**
+     * @returns {number}
+     */
+    get quality() {
+        const ret = wasm.fitresult_quality(this.__wbg_ptr);
+        return ret;
+    }
+}
+if (Symbol.dispose) FitResult.prototype[Symbol.dispose] = FitResult.prototype.free;
+
 /**
  * @enum {0 | 1 | 2}
  */
@@ -117,6 +158,37 @@ export const OutputFormat = Object.freeze({
     Png: 1, "1": "Png",
     Original: 2, "2": "Original",
 });
+
+/**
+ * Encode at the highest JPEG quality that still lands under `target_bytes`.
+ *
+ * Resizes once up front so a target size and a target width can be asked for
+ * together, then binary searches quality over the resized image.
+ *
+ * # Arguments
+ * * `data` - Input image bytes
+ * * `width` - Target width
+ * * `height` - Target height
+ * * `target_bytes` - Size the output must stay under
+ * * `floor_quality` - Minimum JPEG quality (default 30)
+ * * `ceil_quality` - Maximum JPEG quality (default 95)
+ * @param {Uint8Array} data
+ * @param {number} width
+ * @param {number} height
+ * @param {number} target_bytes
+ * @param {number | null} [floor_quality]
+ * @param {number | null} [ceil_quality]
+ * @returns {FitResult}
+ */
+export function fit_to_filesize(data, width, height, target_bytes, floor_quality, ceil_quality) {
+    const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.fit_to_filesize(ptr0, len0, width, height, target_bytes, isLikeNone(floor_quality) ? 0xFFFFFF : floor_quality, isLikeNone(ceil_quality) ? 0xFFFFFF : ceil_quality);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return FitResult.__wrap(ret[0]);
+}
 
 export function init_panic_hook() {
     wasm.init_panic_hook();
@@ -142,35 +214,6 @@ export function resize_by_dimensions(data, width, height, format, quality) {
     const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.resize_by_dimensions(ptr0, len0, width, height, format, isLikeNone(quality) ? 0xFFFFFF : quality);
-    if (ret[3]) {
-        throw takeFromExternrefTable0(ret[2]);
-    }
-    var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
-    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
-    return v2;
-}
-
-/**
- * Resize image to target file size
- * Uses binary search on JPEG quality to hit target size
- *
- * # Arguments
- * * `data` - Input image bytes
- * * `target_bytes` - Target file size in bytes
- * * `floor_quality` - Minimum JPEG quality (default 30)
- * * `ceil_quality` - Maximum JPEG quality (default 95)
- * * `tolerance_percent` - Acceptable deviation from target (default 5%)
- * @param {Uint8Array} data
- * @param {number} target_bytes
- * @param {number | null} [floor_quality]
- * @param {number | null} [ceil_quality]
- * @param {number | null} [_tolerance_percent]
- * @returns {Uint8Array}
- */
-export function resize_by_filesize(data, target_bytes, floor_quality, ceil_quality, _tolerance_percent) {
-    const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.resize_by_filesize(ptr0, len0, target_bytes, isLikeNone(floor_quality) ? 0xFFFFFF : floor_quality, isLikeNone(ceil_quality) ? 0xFFFFFF : ceil_quality, isLikeNone(_tolerance_percent) ? 0x100000001 : Math.fround(_tolerance_percent));
     if (ret[3]) {
         throw takeFromExternrefTable0(ret[2]);
     }

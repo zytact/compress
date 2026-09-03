@@ -52,71 +52,84 @@ pub fn resize_by_dimensions(
     encode_image(&resized, output_format)
 }
 
-/// Resize image to target file size
-/// Uses binary search on JPEG quality to hit target size
+#[wasm_bindgen]
+pub struct FitResult {
+    data: Vec<u8>,
+    quality: u8,
+}
+
+#[wasm_bindgen]
+impl FitResult {
+    #[wasm_bindgen(getter)]
+    pub fn data(&self) -> Vec<u8> {
+        self.data.clone()
+    }
+
+    #[wasm_bindgen(getter)]
+    pub fn quality(&self) -> u8 {
+        self.quality
+    }
+}
+
+/// Encode at the highest JPEG quality that still lands under `target_bytes`.
+///
+/// Resizes once up front so a target size and a target width can be asked for
+/// together, then binary searches quality over the resized image.
 ///
 /// # Arguments
 /// * `data` - Input image bytes
-/// * `target_bytes` - Target file size in bytes
+/// * `width` - Target width
+/// * `height` - Target height
+/// * `target_bytes` - Size the output must stay under
 /// * `floor_quality` - Minimum JPEG quality (default 30)
 /// * `ceil_quality` - Maximum JPEG quality (default 95)
-/// * `tolerance_percent` - Acceptable deviation from target (default 5%)
 #[wasm_bindgen]
-pub fn resize_by_filesize(
+pub fn fit_to_filesize(
     data: &[u8],
+    width: u32,
+    height: u32,
     target_bytes: u32,
     floor_quality: Option<u8>,
     ceil_quality: Option<u8>,
-    _tolerance_percent: Option<f32>,
-) -> Result<Vec<u8>, JsValue> {
+) -> Result<FitResult, JsValue> {
     let img = load_image(data)?;
+    let resized = if width == img.width() && height == img.height() {
+        img
+    } else {
+        resize_image(&img, width, height)?
+    };
 
     let floor = floor_quality.unwrap_or(30).clamp(1, 100);
     let ceil = ceil_quality.unwrap_or(95).clamp(floor, 100);
 
-    // Binary search for the right quality
+    let mut under: Option<(Vec<u8>, u8)> = None;
+    let mut smallest: Option<(Vec<u8>, u8)> = None;
+
     let mut low = floor;
     let mut high = ceil;
-    let mut best_under: Option<Vec<u8>> = None;
-    let mut best_under_diff = u32::MAX;
-    let mut best_result: Option<Vec<u8>> = None;
-    let mut best_diff = u32::MAX;
 
     while low <= high {
-        let mid = (low + high) / 2;
+        let mid = low + (high - low) / 2;
+        let encoded = encode_image(&resized, InternalOutputFormat::Jpeg(mid))?;
 
-        let encoded = encode_image(&img, InternalOutputFormat::Jpeg(mid))?;
-        let size = encoded.len() as u32;
-        let diff = size.abs_diff(target_bytes);
-
-        // Track best result overall (closest to target)
-        if diff < best_diff {
-            best_diff = diff;
-            best_result = Some(encoded.clone());
-        }
-
-        // Track best under-target result
-        if size <= target_bytes && diff < best_under_diff {
-            best_under_diff = diff;
-            best_under = Some(encoded);
-        }
-
-        // Adjust search range
-        if size > target_bytes {
-            high = mid.saturating_sub(1);
-        } else {
+        if encoded.len() as u32 <= target_bytes {
+            under = Some((encoded, mid));
             low = mid + 1;
-        }
-
-        // Prevent infinite loop
-        if low == high {
-            break;
+        } else {
+            let beats_smallest = match &smallest {
+                Some((best, _)) => encoded.len() < best.len(),
+                None => true,
+            };
+            if beats_smallest {
+                smallest = Some((encoded, mid));
+            }
+            high = mid.saturating_sub(1);
         }
     }
 
-    // Prefer under-target result; fall back to lowest-quality overshoot if necessary
-    best_under
-        .or(best_result)
+    under
+        .or(smallest)
+        .map(|(data, quality)| FitResult { data, quality })
         .ok_or_else(|| JsValue::from_str("Failed to encode image at any quality level"))
 }
 
