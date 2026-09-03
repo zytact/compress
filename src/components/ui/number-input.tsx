@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { ComponentProps } from 'react';
 
+import { cn } from '@/lib/utils';
+
 interface NumberInputProps extends Omit<
     ComponentProps<'input'>,
     'value' | 'onChange' | 'onBlur' | 'type' | 'inputMode'
@@ -17,6 +19,7 @@ interface NumberInputProps extends Omit<
 export function NumberInput({
     value,
     onValueChange,
+    className,
     ...props
 }: NumberInputProps) {
     // An empty field is not a number, so it has to be remembered separately.
@@ -25,6 +28,10 @@ export function NumberInput({
     return (
         <input
             {...props}
+            className={cn(
+                'w-full rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm tabular-nums focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none',
+                className,
+            )}
             type="text"
             inputMode="numeric"
             value={empty && value === 0 ? '' : String(value)}

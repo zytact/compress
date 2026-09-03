@@ -1,11 +1,35 @@
 /* tslint:disable */
 /* eslint-disable */
 
+export class FitResult {
+  private constructor();
+  free(): void;
+  [Symbol.dispose](): void;
+  readonly data: Uint8Array;
+  readonly quality: number;
+}
+
 export enum OutputFormat {
   Jpeg = 0,
   Png = 1,
   Original = 2,
 }
+
+/**
+ * Encode at the highest JPEG quality that still lands under `target_bytes`.
+ *
+ * Resizes once up front so a target size and a target width can be asked for
+ * together, then binary searches quality over the resized image.
+ *
+ * # Arguments
+ * * `data` - Input image bytes
+ * * `width` - Target width
+ * * `height` - Target height
+ * * `target_bytes` - Size the output must stay under
+ * * `floor_quality` - Minimum JPEG quality (default 30)
+ * * `ceil_quality` - Maximum JPEG quality (default 95)
+ */
+export function fit_to_filesize(data: Uint8Array, width: number, height: number, target_bytes: number, floor_quality?: number | null, ceil_quality?: number | null): FitResult;
 
 export function init_panic_hook(): void;
 
@@ -21,25 +45,15 @@ export function init_panic_hook(): void;
  */
 export function resize_by_dimensions(data: Uint8Array, width: number, height: number, format: OutputFormat, quality?: number | null): Uint8Array;
 
-/**
- * Resize image to target file size
- * Uses binary search on JPEG quality to hit target size
- *
- * # Arguments
- * * `data` - Input image bytes
- * * `target_bytes` - Target file size in bytes
- * * `floor_quality` - Minimum JPEG quality (default 30)
- * * `ceil_quality` - Maximum JPEG quality (default 95)
- * * `tolerance_percent` - Acceptable deviation from target (default 5%)
- */
-export function resize_by_filesize(data: Uint8Array, target_bytes: number, floor_quality?: number | null, ceil_quality?: number | null, _tolerance_percent?: number | null): Uint8Array;
-
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
+  readonly __wbg_fitresult_free: (a: number, b: number) => void;
+  readonly fit_to_filesize: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
+  readonly fitresult_data: (a: number) => [number, number];
+  readonly fitresult_quality: (a: number) => number;
   readonly resize_by_dimensions: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
-  readonly resize_by_filesize: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
   readonly init_panic_hook: () => void;
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
   readonly __wbindgen_malloc: (a: number, b: number) => number;

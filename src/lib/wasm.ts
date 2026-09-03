@@ -11,10 +11,12 @@ export enum OutputFormat {
     Original = 2,
 }
 
+export type SourceFormat = 'JPEG' | 'PNG' | 'GIF' | 'WebP' | 'HEIC' | 'unknown';
+
 export interface ImageInfo {
     width: number;
     height: number;
-    format: string;
+    format: SourceFormat;
     size_bytes: number;
 }
 
@@ -25,11 +27,17 @@ export interface ResizeByDimensionsOptions {
     quality?: number;
 }
 
-export interface ResizeByFilesizeOptions {
+export interface FitToFilesizeOptions {
+    width: number;
+    height: number;
     targetBytes: number;
     floorQuality?: number;
     ceilQuality?: number;
-    tolerancePercent?: number;
+}
+
+export interface FitToFilesizeResult {
+    data: Uint8Array;
+    quality: number;
 }
 
 /**
@@ -91,27 +99,37 @@ export async function resizeByDimensions(
 }
 
 /**
- * Resize image to target file size
- * Uses binary search on JPEG quality
+ * Encode at the highest JPEG quality that still fits under a target size.
+ *
+ * Resizes to `width` x `height` first, so a target size and a target width can
+ * be asked for together.
  */
-export async function resizeByFilesize(
+export async function fitToFilesize(
     imageData: Uint8Array,
-    options: ResizeByFilesizeOptions,
-): Promise<Uint8Array> {
+    options: FitToFilesizeOptions,
+): Promise<FitToFilesizeResult> {
     const wasm = await initWasm();
 
     try {
-        const result = wasm.resize_by_filesize(
+        const result = wasm.fit_to_filesize(
             imageData,
+            options.width,
+            options.height,
             options.targetBytes,
             options.floorQuality,
             options.ceilQuality,
-            options.tolerancePercent,
         );
-        return new Uint8Array(result);
+        try {
+            return {
+                data: new Uint8Array(result.data),
+                quality: result.quality,
+            };
+        } finally {
+            result.free();
+        }
     } catch (error) {
         throw new Error(
-            `Failed to resize image to target size: ${error instanceof Error ? error.message : String(error)}`,
+            `Failed to fit image to target size: ${error instanceof Error ? error.message : String(error)}`,
         );
     }
 }
@@ -248,7 +266,7 @@ export async function getImageDimensionsFromUrl(
 /**
  * Infer format from file extension
  */
-export function inferFormatFromFilename(filename: string): string {
+export function inferFormatFromFilename(filename: string): SourceFormat {
     const ext = filename.toLowerCase().split('.').pop();
     switch (ext) {
         case 'jpg':

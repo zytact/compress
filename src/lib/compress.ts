@@ -1,20 +1,24 @@
 import {
     OutputFormat,
+    fitToFilesize,
     getMimeType,
     resizeByDimensions,
-    resizeByFilesize,
     uint8ArrayToBlob,
 } from './wasm';
+import type { SourceFormat } from './wasm';
 
-export type CompressionSettings =
-    | {
-          mode: 'dimensions';
-          width: number;
-          height: number;
-          format: OutputFormat;
-          quality: number;
-      }
-    | { mode: 'filesize'; targetKb: number };
+export interface CompressionSettings {
+    width: number;
+    height: number;
+    format: OutputFormat;
+    quality: number;
+}
+
+export interface FitRequest {
+    width: number;
+    height: number;
+    targetBytes: number;
+}
 
 export interface CompressionResult {
     blob: Blob;
@@ -25,6 +29,9 @@ export interface CompressionResult {
     keptOriginal: boolean;
 }
 
+export const FIT_QUALITY_FLOOR = 30;
+export const FIT_QUALITY_CEIL = 95;
+
 /**
  * Resolves `OutputFormat.Original` against the source image's own format.
  * HEIC sources are already converted to JPEG before compression, so they
@@ -32,21 +39,24 @@ export interface CompressionResult {
  */
 export function resolveOutputFormat(
     requested: OutputFormat,
-    originalFormat: string | null,
+    originalFormat: SourceFormat | null,
 ): OutputFormat {
     if (requested !== OutputFormat.Original) return requested;
-    return originalFormat?.toUpperCase() === 'PNG'
-        ? OutputFormat.Png
-        : OutputFormat.Jpeg;
+    return originalFormat === 'PNG' ? OutputFormat.Png : OutputFormat.Jpeg;
+}
+
+export function usesQuality(
+    format: OutputFormat,
+    originalFormat: SourceFormat | null,
+): boolean {
+    return resolveOutputFormat(format, originalFormat) === OutputFormat.Jpeg;
 }
 
 /** Settings that cannot produce an image are skipped while the user types. */
 export function areSettingsCompressible(
     settings: CompressionSettings,
 ): boolean {
-    return settings.mode === 'dimensions'
-        ? settings.width > 0 && settings.height > 0
-        : settings.targetKb > 0;
+    return settings.width > 0 && settings.height > 0;
 }
 
 async function measure(blob: Blob): Promise<{ width: number; height: number }> {
@@ -69,39 +79,16 @@ async function finalize(
  * Runs one compression pass and measures the encoded result.
  *
  * The source is kept whenever encoding would not beat it, so the output is
- * never larger than the input. That overrides a requested format or size when
- * honoring it would cost bytes; `keptOriginal` tells the UI to say so.
+ * never larger than the input. That overrides a requested format when honoring
+ * it would cost bytes; `keptOriginal` tells the UI to say so.
  *
  * Runs inside the worker; call `compress` from `compress-client` instead.
  */
 export async function runCompression(
     source: Uint8Array,
     settings: CompressionSettings,
-    originalFormat: string | null,
+    originalFormat: SourceFormat | null,
 ): Promise<CompressionResult> {
-    // HEIC is converted to JPEG before it reaches here, so the source bytes are
-    // always JPEG or PNG and this describes them exactly.
-    const sourceFormat = resolveOutputFormat(
-        OutputFormat.Original,
-        originalFormat,
-    );
-    const keepSource = () => finalize(source, sourceFormat, true);
-
-    if (settings.mode === 'filesize') {
-        // Already under target, so re-encoding could only add bytes
-        if (source.length <= settings.targetKb * 1024) return keepSource();
-
-        const data = await resizeByFilesize(source, {
-            targetBytes: settings.targetKb * 1024,
-            floorQuality: 30,
-            ceilQuality: 95,
-            tolerancePercent: 0,
-        });
-        return data.length < source.length
-            ? finalize(data, OutputFormat.Jpeg, false)
-            : keepSource();
-    }
-
     const format = resolveOutputFormat(settings.format, originalFormat);
     const data = await resizeByDimensions(source, {
         width: settings.width,
@@ -109,7 +96,26 @@ export async function runCompression(
         format,
         quality: settings.quality,
     });
-    return data.length < source.length
-        ? finalize(data, format, false)
-        : keepSource();
+
+    if (data.length < source.length) return finalize(data, format, false);
+
+    // HEIC is converted to JPEG before it reaches here, so the source bytes are
+    // always JPEG or PNG and this describes them exactly.
+    const sourceFormat = resolveOutputFormat(
+        OutputFormat.Original,
+        originalFormat,
+    );
+    return finalize(source, sourceFormat, true);
+}
+
+export async function runFit(
+    source: Uint8Array,
+    request: FitRequest,
+): Promise<number> {
+    const { quality } = await fitToFilesize(source, {
+        ...request,
+        floorQuality: FIT_QUALITY_FLOOR,
+        ceilQuality: FIT_QUALITY_CEIL,
+    });
+    return quality;
 }

@@ -1,16 +1,25 @@
 # Compress
 
-A fast, privacy-focused image compression and resizing tool that runs entirely in your browser using WebAssembly. No data is sent to any server—all processing happens locally on your device.
+A fast, privacy-focused image compression and resizing tool that runs entirely in your browser using WebAssembly. No data is sent to any server, and all processing happens locally on your device.
 
 ## Features
 
-- **Resize by Dimensions**: Set exact target width and height with customizable JPEG quality
-- **Resize by File Size**: Automatically find optimal quality to hit a target file size (KB/MB)
-- **Format Conversion**: Convert between JPEG and PNG, or preserve original format
-- **HEIC/HEIF Support**: Convert Apple's HEIC images to JPEG using browser-native APIs
-- **Live Preview**: Settings re-compress automatically, with before/after file sizes and dimensions
-- **100% Client-Side**: No uploads, no server processing—your images stay private
-- **Fast WASM Compression**: Powered by Rust/WASM for high-performance image processing
+Size, format and quality are all live at once, so resizing and re-encoding
+happen in one pass rather than as separate modes.
+
+Name a target in KB and the app searches for the JPEG quality that lands just
+under it, at whatever width you picked, then hands the slider back to you.
+
+Drag across the image to wipe between the original and the result. Seeing them
+meet at a seam is the only way to judge the detail that quality trades away.
+
+Other things it does:
+
+- Converts between JPEG and PNG, or keeps the original format
+- Converts Apple's HEIC images to JPEG using browser-native APIs
+- Never returns a file larger than the source, and says why when it cannot improve on it
+- Uploads nothing, so your images stay on your device
+- Runs the encoder as Rust compiled to WebAssembly, off the main thread
 
 ## Demo
 
@@ -19,7 +28,7 @@ Visit the live demo at `https://compress.zytact.com`
 Or run it locally:
 
 ```bash
-bun run dev
+pnpm run dev
 ```
 
 Then open `http://localhost:3000` in your browser.
@@ -38,42 +47,42 @@ Then open `http://localhost:3000` in your browser.
 ### Prerequisites
 
 - Node.js 24+
-- Bun (for package management)
+- pnpm (for package management)
 - Rust toolchain + `wasm-pack` (for WASM builds)
 
 ### Installation
 
 ```bash
 # Install dependencies
-bun install
+pnpm install
 
 # Build WASM module (required first time)
-bun run build:wasm
+pnpm run build:wasm
 
 # Start development server
-bun run dev
+pnpm run dev
 ```
 
 ### Build Commands
 
 ```bash
 # Development server with hot reload
-bun run dev
+pnpm run dev
 
 # Build WASM module
-bun run build:wasm
+pnpm run build:wasm
 
 # Production build
-bun run build
+pnpm run build
 
 # Preview production build
-bun run preview
+pnpm run preview
 
 # Lint code
-bun run lint
+pnpm run lint
 
 # Format code
-bun run check
+pnpm run check
 ```
 
 ### Project Structure
@@ -113,7 +122,7 @@ The core image processing is written in Rust and compiled to WebAssembly using `
 To rebuild the WASM module after changing `wasm/src/lib.rs`:
 
 ```bash
-bun run build:wasm
+pnpm run build:wasm
 ```
 
 For local development with faster iteration:
@@ -129,7 +138,7 @@ Contributions are welcome! Please follow these guidelines:
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Run linting (`bun run test`)
+3. Run linting (`pnpm run test`)
 4. Commit your changes with descriptive messages
 5. Push to your branch and create a Pull Request
 
