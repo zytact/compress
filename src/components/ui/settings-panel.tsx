@@ -52,7 +52,7 @@ export function SettingsPanel({
     const jpegOut = usesQuality(format, originalFormat);
 
     return (
-        <div className="divide-y divide-border rounded-xl border border-border bg-card">
+        <div className="divide-y divide-border rounded-none border border-border bg-card">
             <Section title="Size" readout={`${width} × ${height} px`}>
                 <Segmented
                     label="Scale"

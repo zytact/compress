@@ -301,7 +301,7 @@ export default function ImageCompressor() {
                     {notice && (
                         <div
                             className={cn(
-                                'space-y-1 rounded-lg border p-3 text-sm',
+                                'space-y-1 rounded-none border p-3 text-sm',
                                 notice.tone === 'warning'
                                     ? 'border-signal/40 bg-signal-soft'
                                     : 'border-border bg-muted',

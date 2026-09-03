@@ -68,7 +68,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                     <header className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6">
                         <a
                             href="/"
-                            className="rounded-sm text-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            className="rounded-none text-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                         >
                             <Wordmark />
                         </a>
@@ -78,7 +78,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
                                 aria-label="View source on GitHub"
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                className="rounded-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                             >
                                 <img
                                     src="/GitHub_light.svg"
