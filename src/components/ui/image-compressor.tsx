@@ -12,9 +12,10 @@ import { Button } from './button';
 import type { ImageInfo } from '@/lib/wasm';
 import type { CompressionSettings } from '@/lib/compress';
 import type { FitOutcome } from '@/lib/compression-notice';
-import { areSettingsCompressible } from '@/lib/compress';
+import type { SourceToken } from '@/lib/compress-client';
+import { areSettingsCompressible, sameSettings } from '@/lib/compress';
 import { describeCompression, describeFit } from '@/lib/compression-notice';
-import { compress, fitQuality } from '@/lib/compress-client';
+import { compress, fitToSize, loadSource } from '@/lib/compress-client';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { cn } from '@/lib/utils';
 import {
@@ -42,10 +43,13 @@ const LIVE_UPDATE_DELAY_MS = 300;
 
 export default function ImageCompressor() {
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
-    const [sourceBytes, setSourceBytes] = useState<Uint8Array | null>(null);
+    const [sourceToken, setSourceToken] = useState<SourceToken | null>(null);
     const [originalPreview, setOriginalPreview] = useState<string | null>(null);
     const [originalInfo, setOriginalInfo] = useState<ImageInfo | null>(null);
     const [compressed, setCompressed] = useState<CompressedState | null>(null);
+    // The settings `compressed` was produced for, so settings it already
+    // covers do not trigger another pass
+    const [applied, setApplied] = useState<CompressionSettings | null>(null);
     const [compressing, setCompressing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -75,8 +79,9 @@ export default function ImageCompressor() {
         invalidateFit();
         setFit(null);
         setSelectedFile(file);
-        setSourceBytes(null);
+        setSourceToken(null);
         setCompressed(null);
+        setApplied(null);
         setOriginalPreview(null);
         setOriginalInfo(null);
 
@@ -98,6 +103,15 @@ export default function ImageCompressor() {
             const dims = await getImageDimensionsFromUrl(previewUrl);
             const bytes = await fileToUint8Array(source);
 
+            // The worker keeps one decoded image and answers for that one only,
+            // so a pick that has already lost must not hand it another
+            if (!isCurrent()) {
+                URL.revokeObjectURL(previewUrl);
+                return;
+            }
+
+            const token = await loadSource(bytes, format);
+
             if (!isCurrent()) {
                 URL.revokeObjectURL(previewUrl);
                 return;
@@ -111,7 +125,7 @@ export default function ImageCompressor() {
                 format,
             });
             setWidth(dims.width);
-            setSourceBytes(bytes);
+            setSourceToken(token);
         } catch (err) {
             if (!isCurrent()) return;
             setError(
@@ -138,10 +152,18 @@ export default function ImageCompressor() {
     // Editing is still in flight while the debounced copy lags the live one
     const settled = debouncedSettings === settings;
     const originalFormat = originalInfo?.format ?? null;
+    // A target-size search encodes the image it settles on, so the result on
+    // screen can already be the one the live settings ask for
+    const upToDate = applied !== null && sameSettings(applied, settings);
 
     // Recompress whenever the image or its settled settings change
     useEffect(() => {
-        if (!sourceBytes || !settled || !areSettingsCompressible(settings)) {
+        if (
+            sourceToken === null ||
+            !settled ||
+            upToDate ||
+            !areSettingsCompressible(settings)
+        ) {
             setCompressing(false);
             return;
         }
@@ -150,13 +172,14 @@ export default function ImageCompressor() {
         setCompressing(true);
         setError(null);
 
-        compress(sourceBytes, settings, originalFormat)
+        compress(sourceToken, settings)
             .then((result) => {
-                if (cancelled) return;
+                if (cancelled || !result) return;
                 setCompressed({
                     previewUrl: URL.createObjectURL(result.blob),
                     ...result,
                 });
+                setApplied(settings);
             })
             .catch((err: unknown) => {
                 if (cancelled) return;
@@ -171,17 +194,17 @@ export default function ImageCompressor() {
         return () => {
             cancelled = true;
         };
-    }, [sourceBytes, settings, settled, originalFormat]);
+    }, [sourceToken, settings, settled, upToDate]);
 
     const notice =
-        compressed && originalInfo
+        compressed && originalInfo && applied
             ? describeCompression({
                   keptOriginal: compressed.keptOriginal,
                   outputFormat: compressed.format,
                   outputSize: compressed.blob.size,
                   originalSize: originalInfo.size_bytes,
                   originalFormat: originalInfo.format,
-                  settings: debouncedSettings,
+                  settings: applied,
               })
             : null;
 
@@ -197,7 +220,7 @@ export default function ImageCompressor() {
     }, [compressed]);
 
     const handleFit = async () => {
-        if (!sourceBytes || width <= 0) return;
+        if (sourceToken === null || width <= 0) return;
 
         invalidateFit();
         const attempt = fitAttemptRef.current;
@@ -205,12 +228,21 @@ export default function ImageCompressor() {
         setFitting(true);
         setError(null);
         try {
-            const solved = await fitQuality(sourceBytes, {
+            const result = await fitToSize(sourceToken, {
                 width,
                 height,
                 targetBytes: targetKb * 1024,
             });
-            if (fitAttemptRef.current !== attempt) return;
+            if (fitAttemptRef.current !== attempt || !result) return;
+
+            const { quality: solved, ...encoded } = result;
+            // The search already encoded this image, so show it rather than
+            // paying for the same pass again once the new quality settles
+            setCompressed({
+                previewUrl: URL.createObjectURL(encoded.blob),
+                ...encoded,
+            });
+            setApplied({ ...settings, quality: solved });
             setQuality(solved);
             setFit({ width, targetKb, quality: solved });
         } catch (err) {
@@ -288,7 +320,7 @@ export default function ImageCompressor() {
                     <ImageCompare
                         originalUrl={originalPreview}
                         resultUrl={compressed?.previewUrl ?? null}
-                        updating={compressing || !settled}
+                        updating={(compressing || !settled) && !upToDate}
                     />
 
                     <ByteBar

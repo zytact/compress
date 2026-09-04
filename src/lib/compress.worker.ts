@@ -1,44 +1,71 @@
 /// <reference lib="webworker" />
 import { runCompression, runFit } from './compress';
+import { ImageSource } from './wasm';
 import type {
     CompressionResult,
     CompressionSettings,
     FitRequest,
+    FitResult,
 } from './compress';
-import type { SourceFormat } from './wasm';
+import type { ImageBytes, SourceFormat } from './wasm';
 
 export type CompressRequest =
     | {
           id: number;
-          kind: 'compress';
-          source: Uint8Array;
-          settings: CompressionSettings;
+          kind: 'load';
+          source: ImageBytes;
           originalFormat: SourceFormat | null;
       }
-    | { id: number; kind: 'fit'; source: Uint8Array; request: FitRequest };
+    | { id: number; kind: 'compress'; settings: CompressionSettings }
+    | { id: number; kind: 'fit'; request: FitRequest };
 
 export type CompressResponse =
+    | { id: number; ok: true; kind: 'load' }
     | ({ id: number; ok: true; kind: 'compress' } & CompressionResult)
-    | { id: number; ok: true; kind: 'fit'; quality: number }
+    | ({ id: number; ok: true; kind: 'fit' } & FitResult)
     | { id: number; ok: false; error: string };
 
+interface Loaded {
+    image: ImageSource;
+    originalFormat: SourceFormat | null;
+}
+
+let loaded: Loaded | null = null;
+
+function requireLoaded(): Loaded {
+    if (!loaded) throw new Error('No image has been loaded');
+    return loaded;
+}
+
 async function handle(data: CompressRequest): Promise<CompressResponse> {
-    if (data.kind === 'fit') {
-        const quality = await runFit(data.source, data.request);
-        return { id: data.id, ok: true, kind: 'fit', quality };
+    if (data.kind === 'load') {
+        // The decoded pixels of the outgoing image are dead the moment a new
+        // one arrives, and WASM memory is not garbage collected
+        loaded?.image.free();
+        loaded = null;
+
+        const image = await ImageSource.create(data.source);
+        loaded = { image, originalFormat: data.originalFormat };
+        return { id: data.id, ok: true, kind: 'load' };
     }
 
-    const result = await runCompression(
-        data.source,
-        data.settings,
-        data.originalFormat,
-    );
+    const { image, originalFormat } = requireLoaded();
+
+    if (data.kind === 'fit') {
+        const result = runFit(image, data.request, originalFormat);
+        return { id: data.id, ok: true, kind: 'fit', ...result };
+    }
+
+    const result = runCompression(image, data.settings, originalFormat);
     return { id: data.id, ok: true, kind: 'compress', ...result };
 }
 
-self.addEventListener(
-    'message',
-    async ({ data }: MessageEvent<CompressRequest>) => {
+// Requests mutate and read the one loaded image, so they run one after another
+// rather than interleaving at their awaits
+let queue: Promise<void> = Promise.resolve();
+
+self.addEventListener('message', ({ data }: MessageEvent<CompressRequest>) => {
+    queue = queue.then(async () => {
         try {
             self.postMessage(await handle(data));
         } catch (error) {
@@ -49,5 +76,5 @@ self.addEventListener(
             };
             self.postMessage(response);
         }
-    },
-);
+    });
+});

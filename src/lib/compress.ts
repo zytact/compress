@@ -1,11 +1,5 @@
-import {
-    OutputFormat,
-    fitToFilesize,
-    getMimeType,
-    resizeByDimensions,
-    uint8ArrayToBlob,
-} from './wasm';
-import type { SourceFormat } from './wasm';
+import { OutputFormat, getMimeType, uint8ArrayToBlob } from './wasm';
+import type { DecodedSource, EncodedImage, SourceFormat } from './wasm';
 
 export interface CompressionSettings {
     width: number;
@@ -27,6 +21,11 @@ export interface CompressionResult {
     height: number;
     /** The source was kept because encoding it would not have made it smaller. */
     keptOriginal: boolean;
+}
+
+/** A compression result plus the quality the target-size search settled on. */
+export interface FitResult extends CompressionResult {
+    quality: number;
 }
 
 export const FIT_QUALITY_FLOOR = 30;
@@ -59,45 +58,42 @@ export function areSettingsCompressible(
     return settings.width > 0 && settings.height > 0;
 }
 
-async function measure(blob: Blob): Promise<{ width: number; height: number }> {
-    const bitmap = await createImageBitmap(blob);
-    const { width, height } = bitmap;
-    bitmap.close();
-    return { width, height };
-}
-
-async function finalize(
-    data: Uint8Array,
-    format: OutputFormat,
-    keptOriginal: boolean,
-): Promise<CompressionResult> {
-    const blob = uint8ArrayToBlob(data, getMimeType(format));
-    return { blob, format, keptOriginal, ...(await measure(blob)) };
+/** Whether two settings would produce the same file, so one result covers both. */
+export function sameSettings(
+    a: CompressionSettings,
+    b: CompressionSettings,
+): boolean {
+    return (
+        a.width === b.width &&
+        a.height === b.height &&
+        a.format === b.format &&
+        a.quality === b.quality
+    );
 }
 
 /**
- * Runs one compression pass and measures the encoded result.
+ * Returns whichever is smaller: the freshly encoded image, or the untouched
+ * source.
  *
- * The source is kept whenever encoding would not beat it, so the output is
- * never larger than the input. That overrides a requested format when honoring
- * it would cost bytes; `keptOriginal` tells the UI to say so.
- *
- * Runs inside the worker; call `compress` from `compress-client` instead.
+ * The output is therefore never larger than the input. That overrides a
+ * requested format when honoring it would cost bytes; `keptOriginal` tells the
+ * UI to say so.
  */
-export async function runCompression(
-    source: Uint8Array,
-    settings: CompressionSettings,
+function keepSmaller(
+    source: DecodedSource,
+    encoded: EncodedImage,
+    format: OutputFormat,
     originalFormat: SourceFormat | null,
-): Promise<CompressionResult> {
-    const format = resolveOutputFormat(settings.format, originalFormat);
-    const data = await resizeByDimensions(source, {
-        width: settings.width,
-        height: settings.height,
-        format,
-        quality: settings.quality,
-    });
-
-    if (data.length < source.length) return finalize(data, format, false);
+): CompressionResult {
+    if (encoded.data.length < source.byteLength) {
+        return {
+            blob: uint8ArrayToBlob(encoded.data, getMimeType(format)),
+            format,
+            width: encoded.width,
+            height: encoded.height,
+            keptOriginal: false,
+        };
+    }
 
     // HEIC is converted to JPEG before it reaches here, so the source bytes are
     // always JPEG or PNG and this describes them exactly.
@@ -105,17 +101,53 @@ export async function runCompression(
         OutputFormat.Original,
         originalFormat,
     );
-    return finalize(source, sourceFormat, true);
+    return {
+        blob: uint8ArrayToBlob(source.bytes, getMimeType(sourceFormat)),
+        format: sourceFormat,
+        width: source.width,
+        height: source.height,
+        keptOriginal: true,
+    };
 }
 
-export async function runFit(
-    source: Uint8Array,
+/**
+ * Runs one compression pass over an already decoded source.
+ *
+ * Runs inside the worker; call `compress` from `compress-client` instead.
+ */
+export function runCompression(
+    source: DecodedSource,
+    settings: CompressionSettings,
+    originalFormat: SourceFormat | null,
+): CompressionResult {
+    const format = resolveOutputFormat(settings.format, originalFormat);
+    const encoded = source.encode({
+        width: settings.width,
+        height: settings.height,
+        format,
+        quality: settings.quality,
+    });
+
+    return keepSmaller(source, encoded, format, originalFormat);
+}
+
+/**
+ * Searches for the quality that lands just under a target size, and returns the
+ * image that search already encoded so the UI never has to encode it again.
+ */
+export function runFit(
+    source: DecodedSource,
     request: FitRequest,
-): Promise<number> {
-    const { quality } = await fitToFilesize(source, {
+    originalFormat: SourceFormat | null,
+): FitResult {
+    const output = source.fit({
         ...request,
         floorQuality: FIT_QUALITY_FLOOR,
         ceilQuality: FIT_QUALITY_CEIL,
     });
-    return quality;
+
+    return {
+        ...keepSmaller(source, output, OutputFormat.Jpeg, originalFormat),
+        quality: output.quality,
+    };
 }
