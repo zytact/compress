@@ -16,6 +16,6 @@ pnpm build
 
 `pnpm check` runs Prettier over the repo and then ESLint with `--fix`. Run `pnpm lint` on its own when you want failures reported instead of fixed.
 
-Changes under `wasm/` need `pnpm build:wasm` before `pnpm build`, since the build reads the compiled artifacts from `public/wasm/`.
+Changes under `wasm/` need `cargo test` from `wasm/` and `pnpm build:wasm` before `pnpm build`, since the build reads the compiled artifacts from `public/wasm/`.
 
 To confirm a change in the real browser rather than in tests, use the `verify-compress` skill.
