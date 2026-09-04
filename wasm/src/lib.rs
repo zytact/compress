@@ -1,4 +1,4 @@
-use image::{DynamicImage, ImageFormat};
+use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader};
 use std::io::Cursor;
 use wasm_bindgen::prelude::*;
 
@@ -137,9 +137,20 @@ pub fn fit_to_filesize(
 // Internal helper functions
 // ============================================================================
 
+/// Decodes an image and bakes its EXIF orientation into the pixels, so the
+/// dimensions here match the upright ones the browser reports to the caller.
 fn load_image(data: &[u8]) -> Result<DynamicImage, JsValue> {
-    image::load_from_memory(data)
-        .map_err(|e| JsValue::from_str(&format!("Failed to decode image: {}", e)))
+    let decode = || -> Result<DynamicImage, image::ImageError> {
+        let mut decoder = ImageReader::new(Cursor::new(data))
+            .with_guessed_format()?
+            .into_decoder()?;
+        let orientation = decoder.orientation()?;
+        let mut img = DynamicImage::from_decoder(decoder)?;
+        img.apply_orientation(orientation);
+        Ok(img)
+    };
+
+    decode().map_err(|e| JsValue::from_str(&format!("Failed to decode image: {}", e)))
 }
 
 fn resize_image(img: &DynamicImage, width: u32, height: u32) -> Result<DynamicImage, JsValue> {
@@ -194,5 +205,33 @@ fn determine_output_format(
                 _ => InternalOutputFormat::Jpeg(quality), // Default to JPEG
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 400x200 landscape pixels tagged Orientation=6, so it is upright at
+    /// 200x400: red on top, blue below. iPhone photos arrive exactly like this.
+    const ORIENTATION_6: &[u8] = include_bytes!("../tests/fixtures/orientation-6.jpg");
+
+    #[test]
+    fn decoding_applies_exif_orientation() {
+        let img = load_image(ORIENTATION_6).expect("fixture decodes");
+
+        assert_eq!((img.width(), img.height()), (200, 400));
+
+        let rgb = img.to_rgb8();
+        let top = rgb.get_pixel(100, 50).0;
+        let bottom = rgb.get_pixel(100, 350).0;
+        assert!(
+            top[0] > 200 && top[2] < 60,
+            "top half should be red: {top:?}"
+        );
+        assert!(
+            bottom[2] > 200 && bottom[0] < 60,
+            "bottom half should be blue: {bottom:?}"
+        );
     }
 }
