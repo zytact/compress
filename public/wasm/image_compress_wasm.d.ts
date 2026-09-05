@@ -1,12 +1,55 @@
 /* tslint:disable */
 /* eslint-disable */
 
+export class EncodedImage {
+  private constructor();
+  free(): void;
+  [Symbol.dispose](): void;
+  readonly data: Uint8Array;
+  readonly width: number;
+  readonly height: number;
+}
+
 export class FitResult {
   private constructor();
   free(): void;
   [Symbol.dispose](): void;
   readonly data: Uint8Array;
+  readonly width: number;
+  readonly height: number;
   readonly quality: number;
+}
+
+export class ImageSource {
+  free(): void;
+  [Symbol.dispose](): void;
+  /**
+   * Encode at the highest JPEG quality that still lands under `target_bytes`.
+   *
+   * Resizes once up front so a target size and a target width can be asked
+   * for together, then binary searches quality over the resized image.
+   *
+   * # Arguments
+   * * `width` - Target width
+   * * `height` - Target height
+   * * `target_bytes` - Size the output must stay under
+   * * `floor_quality` - Minimum JPEG quality (default 30)
+   * * `ceil_quality` - Maximum JPEG quality (default 95)
+   */
+  fit_to_filesize(width: number, height: number, target_bytes: number, floor_quality?: number | null, ceil_quality?: number | null): FitResult;
+  constructor(data: Uint8Array);
+  /**
+   * Encode at an exact size.
+   *
+   * # Arguments
+   * * `width` - Target width
+   * * `height` - Target height
+   * * `format` - Output format (Jpeg, Png, Original)
+   * * `quality` - JPEG quality 1-100 (optional, default 85)
+   */
+  encode(width: number, height: number, format: OutputFormat, quality?: number | null): EncodedImage;
+  readonly width: number;
+  readonly height: number;
 }
 
 export enum OutputFormat {
@@ -15,46 +58,28 @@ export enum OutputFormat {
   Original = 2,
 }
 
-/**
- * Encode at the highest JPEG quality that still lands under `target_bytes`.
- *
- * Resizes once up front so a target size and a target width can be asked for
- * together, then binary searches quality over the resized image.
- *
- * # Arguments
- * * `data` - Input image bytes
- * * `width` - Target width
- * * `height` - Target height
- * * `target_bytes` - Size the output must stay under
- * * `floor_quality` - Minimum JPEG quality (default 30)
- * * `ceil_quality` - Maximum JPEG quality (default 95)
- */
-export function fit_to_filesize(data: Uint8Array, width: number, height: number, target_bytes: number, floor_quality?: number | null, ceil_quality?: number | null): FitResult;
-
 export function init_panic_hook(): void;
-
-/**
- * Resize image by exact dimensions
- *
- * # Arguments
- * * `data` - Input image bytes
- * * `width` - Target width
- * * `height` - Target height
- * * `format` - Output format (Jpeg, Png, Original)
- * * `quality` - JPEG quality 1-100 (optional, default 85)
- */
-export function resize_by_dimensions(data: Uint8Array, width: number, height: number, format: OutputFormat, quality?: number | null): Uint8Array;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
+  readonly __wbg_encodedimage_free: (a: number, b: number) => void;
   readonly __wbg_fitresult_free: (a: number, b: number) => void;
-  readonly fit_to_filesize: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
+  readonly __wbg_imagesource_free: (a: number, b: number) => void;
+  readonly encodedimage_data: (a: number) => [number, number];
+  readonly encodedimage_height: (a: number) => number;
+  readonly encodedimage_width: (a: number) => number;
   readonly fitresult_data: (a: number) => [number, number];
   readonly fitresult_quality: (a: number) => number;
-  readonly resize_by_dimensions: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+  readonly imagesource_encode: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+  readonly imagesource_fit_to_filesize: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+  readonly imagesource_height: (a: number) => number;
+  readonly imagesource_new: (a: number, b: number) => [number, number, number];
+  readonly imagesource_width: (a: number) => number;
   readonly init_panic_hook: () => void;
+  readonly fitresult_height: (a: number) => number;
+  readonly fitresult_width: (a: number) => number;
   readonly __wbindgen_free: (a: number, b: number, c: number) => void;
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

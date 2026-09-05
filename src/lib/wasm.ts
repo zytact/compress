@@ -1,6 +1,8 @@
 // WASM loader and wrapper
 
-type WasmModule = any; // Dynamic import
+import type * as Wasm from '../../public/wasm/image_compress_wasm.js';
+
+type WasmModule = typeof Wasm;
 
 let wasmModule: WasmModule | null = null;
 let initPromise: Promise<WasmModule> | null = null;
@@ -20,24 +22,37 @@ export interface ImageInfo {
     size_bytes: number;
 }
 
-export interface ResizeByDimensionsOptions {
+/**
+ * Image bytes on a buffer this tab owns, which is what backing a `Blob` and
+ * transferring between threads both need.
+ */
+export type ImageBytes = Uint8Array<ArrayBuffer>;
+
+/** Encoded bytes and the size they were encoded at, straight from the encoder. */
+export interface EncodedImage {
+    data: ImageBytes;
+    width: number;
+    height: number;
+}
+
+/** An encoded image plus the JPEG quality a target-size search settled on. */
+export interface FitOutput extends EncodedImage {
+    quality: number;
+}
+
+export interface EncodeOptions {
     width: number;
     height: number;
     format: OutputFormat;
     quality?: number;
 }
 
-export interface FitToFilesizeOptions {
+export interface FitOptions {
     width: number;
     height: number;
     targetBytes: number;
     floorQuality?: number;
     ceilQuality?: number;
-}
-
-export interface FitToFilesizeResult {
-    data: Uint8Array;
-    quality: number;
 }
 
 /**
@@ -73,71 +88,126 @@ export async function initWasm(): Promise<WasmModule> {
     return initPromise;
 }
 
-/**
- * Resize image by dimensions
- */
-export async function resizeByDimensions(
-    imageData: Uint8Array,
-    options: ResizeByDimensionsOptions,
-): Promise<Uint8Array> {
-    const wasm = await initWasm();
-
-    try {
-        const result = wasm.resize_by_dimensions(
-            imageData,
-            options.width,
-            options.height,
-            options.format,
-            options.quality,
-        );
-        return new Uint8Array(result);
-    } catch (error) {
-        throw new Error(
-            `Failed to resize image: ${error instanceof Error ? error.message : String(error)}`,
-        );
-    }
+/** What a compression pass needs from a decoded source. */
+export interface DecodedSource {
+    /** The bytes the user picked, kept for the never-grow fallback. */
+    readonly bytes: ImageBytes;
+    readonly width: number;
+    readonly height: number;
+    readonly byteLength: number;
+    encode: (options: EncodeOptions) => EncodedImage;
+    fit: (options: FitOptions) => FitOutput;
 }
 
 /**
- * Encode at the highest JPEG quality that still fits under a target size.
+ * One decoded image, encoded as many times as the user edits it.
  *
- * Resizes to `width` x `height` first, so a target size and a target width can
- * be asked for together.
+ * The WASM side holds the decoded pixels and the last size they were resized
+ * to, so changing only the quality re-encodes without decoding or resizing
+ * again. Create one per image the user picks and `free()` it when they pick
+ * another.
  */
-export async function fitToFilesize(
-    imageData: Uint8Array,
-    options: FitToFilesizeOptions,
-): Promise<FitToFilesizeResult> {
-    const wasm = await initWasm();
+export class ImageSource implements DecodedSource {
+    private constructor(
+        private readonly handle: Wasm.ImageSource,
+        readonly bytes: ImageBytes,
+    ) {}
 
-    try {
-        const result = wasm.fit_to_filesize(
-            imageData,
-            options.width,
-            options.height,
-            options.targetBytes,
-            options.floorQuality,
-            options.ceilQuality,
-        );
+    static async create(bytes: ImageBytes): Promise<ImageSource> {
+        const wasm = await initWasm();
         try {
-            return {
-                data: new Uint8Array(result.data),
-                quality: result.quality,
-            };
+            return new ImageSource(new wasm.ImageSource(bytes), bytes);
+        } catch (error) {
+            throw new Error(`Failed to decode image: ${describe(error)}`);
+        }
+    }
+
+    get width(): number {
+        return this.handle.width;
+    }
+
+    get height(): number {
+        return this.handle.height;
+    }
+
+    get byteLength(): number {
+        return this.bytes.length;
+    }
+
+    encode(options: EncodeOptions): EncodedImage {
+        let result;
+        try {
+            result = this.handle.encode(
+                options.width,
+                options.height,
+                options.format,
+                options.quality,
+            );
+        } catch (error) {
+            throw new Error(`Failed to resize image: ${describe(error)}`);
+        }
+
+        try {
+            return read(result);
         } finally {
             result.free();
         }
-    } catch (error) {
-        throw new Error(
-            `Failed to fit image to target size: ${error instanceof Error ? error.message : String(error)}`,
-        );
     }
+
+    /**
+     * Encode at the highest JPEG quality that still fits under a target size.
+     *
+     * Resizes to `width` x `height` first, so a target size and a target width
+     * can be asked for together.
+     */
+    fit(options: FitOptions): FitOutput {
+        let result;
+        try {
+            result = this.handle.fit_to_filesize(
+                options.width,
+                options.height,
+                options.targetBytes,
+                options.floorQuality,
+                options.ceilQuality,
+            );
+        } catch (error) {
+            throw new Error(
+                `Failed to fit image to target size: ${describe(error)}`,
+            );
+        }
+
+        try {
+            return { ...read(result), quality: result.quality };
+        } finally {
+            result.free();
+        }
+    }
+
+    free(): void {
+        this.handle.free();
+    }
+}
+
+const describe = (error: unknown) =>
+    error instanceof Error ? error.message : String(error);
+
+/**
+ * Copies an encoded result out of WASM memory, which the caller frees straight
+ * after. The bytes land on a fresh buffer this tab owns, never shared memory,
+ * which is why the narrowing below holds.
+ */
+function read(result: Wasm.EncodedImage | Wasm.FitResult): EncodedImage {
+    return {
+        data: result.data as ImageBytes,
+        width: result.width,
+        height: result.height,
+    };
 }
 
 /**
  * Convert a File or Blob to Uint8Array
  */
-export async function fileToUint8Array(file: Blob): Promise<Uint8Array> {
+export async function fileToUint8Array(file: Blob): Promise<ImageBytes> {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
@@ -290,10 +360,10 @@ export function inferFormatFromFilename(filename: string): SourceFormat {
  * Convert Uint8Array to Blob for download/preview
  */
 export function uint8ArrayToBlob(
-    data: Uint8Array,
+    data: ImageBytes,
     mimeType: string = 'image/jpeg',
 ): Blob {
-    return new Blob([new Uint8Array(data)], { type: mimeType });
+    return new Blob([data], { type: mimeType });
 }
 
 /**
