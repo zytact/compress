@@ -27,7 +27,7 @@ interface NoticeInput {
     settings: CompressionSettings;
 }
 
-/** Below this a target size cannot be undercut by a meaningful amount. */
+/** A source this small rounds to a target no one can ask for a KB under. */
 const SMALLEST_USEFUL_TARGET_KB = 2;
 
 const toKb = (bytes: number) => Math.floor(bytes / 1024);
@@ -39,7 +39,7 @@ const formatLabel = (format: OutputFormat) =>
 function targetAdvice(originalSize: number): string {
     const kb = toKb(originalSize);
     return kb < SMALLEST_USEFUL_TARGET_KB
-        ? 'This file is already under 2 KB, so there is no smaller target worth asking for.'
+        ? `This file is already under ${SMALLEST_USEFUL_TARGET_KB} KB, so there is no smaller target worth asking for.`
         : `Fit to a size under ${kb} KB. Quality stops dropping at ${FIT_QUALITY_FLOOR}, so a very small target can still come up short.`;
 }
 
@@ -73,11 +73,16 @@ export function describeCompression({
 
     const sizeAdvice = `the size below ${settings.width} x ${settings.height}`;
 
+    // A HEIC pick reaches this branch as the JPEG it was decoded to, so calling
+    // that the user's original would name a file they never had.
+    const kept =
+        originalFormat === 'HEIC' ? 'the decoded JPEG' : 'your original';
+
     return {
         tone: 'neutral',
         message: dropped
-            ? `Saving your original as ${dropped} at these settings would not make it any smaller, so we kept your original ${formatLabel(outputFormat)}.`
-            : 'Saving your original at these settings would not make it any smaller, so we kept the original.',
+            ? `Saving ${kept} as ${dropped} at these settings would not make it any smaller, so we kept the ${formatLabel(outputFormat)}.`
+            : `Saving ${kept} at these settings would not make it any smaller, so we kept it unchanged.`,
         advice: usesQuality(settings.format, originalFormat)
             ? `Lower the quality below ${settings.quality}, or ${sizeAdvice}.`
             : `Switch to JPEG to trade detail for bytes, or lower ${sizeAdvice}.`,

@@ -17,7 +17,7 @@ Other things it does:
 
 - Converts between JPEG and PNG, or keeps the original format
 - Converts Apple's HEIC images to JPEG using browser-native APIs
-- Returns the original untouched when re-encoding would not make it smaller, and says why
+- Compares each pass against the source and keeps whichever is smaller, so a pass never grows the image
 - Explains when a HEIC source grows, since JPEG cannot always match it
 - Uploads nothing, so your images stay on your device
 - Runs the encoder as Rust compiled to WebAssembly, off the main thread

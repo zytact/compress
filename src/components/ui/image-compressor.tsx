@@ -21,7 +21,6 @@ import { cn } from '@/lib/utils';
 import {
     OutputFormat,
     convertHeicToJpeg,
-    fileToUint8Array,
     formatBytes,
     getFileExtension,
     getImageDimensionsFromUrl,
@@ -101,7 +100,7 @@ export default function ImageCompressor() {
 
             const previewUrl = URL.createObjectURL(source);
             const dims = await getImageDimensionsFromUrl(previewUrl);
-            const bytes = await fileToUint8Array(source);
+            const bytes = new Uint8Array(await source.arrayBuffer());
 
             // The worker keeps one decoded image and answers for that one only,
             // so a pick that has already lost must not hand it another

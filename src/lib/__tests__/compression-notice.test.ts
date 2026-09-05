@@ -45,7 +45,7 @@ describe('describeCompression', () => {
 
         expect(notice?.tone).toBe('neutral');
         expect(notice?.message).toContain('as JPEG');
-        expect(notice?.message).toContain('your original PNG');
+        expect(notice?.message).toContain('we kept the PNG');
         expect(notice?.advice).toBe(
             'Lower the quality below 85, or the size below 100 x 100.',
         );
@@ -70,7 +70,7 @@ describe('describeCompression', () => {
             settings: { ...settings, format: OutputFormat.Png },
         });
 
-        expect(notice?.message).not.toContain(' as ');
+        expect(notice?.message).not.toContain('JPEG');
     });
 
     it('warns and names a target when a HEIC grew', () => {

@@ -89,7 +89,11 @@ export async function initWasm(): Promise<WasmModule> {
 
 /** What a compression pass needs from a decoded source. */
 export interface DecodedSource {
-    /** The bytes the user picked, kept for the never-grow fallback. */
+    /**
+     * The bytes handed to the decoder, kept for the never-grow fallback. HEIC
+     * is converted to JPEG before this point, so these are not always the
+     * bytes the user picked.
+     */
     readonly bytes: ImageBytes;
     readonly width: number;
     readonly height: number;
@@ -201,13 +205,6 @@ function read(result: Wasm.EncodedImage | Wasm.FitResult): EncodedImage {
         width: result.width,
         height: result.height,
     };
-}
-
-/**
- * Convert a File or Blob to Uint8Array
- */
-export async function fileToUint8Array(file: Blob): Promise<ImageBytes> {
-    return new Uint8Array(await file.arrayBuffer());
 }
 
 /** Loads a URL into an image element, rejecting with `failureMessage`. */
