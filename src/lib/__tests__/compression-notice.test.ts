@@ -89,7 +89,7 @@ describe('describeCompression', () => {
         });
 
         expect(notice?.advice).toBe(
-            'A file this small has almost nothing left to give.',
+            'This file is already under 2 KB, so there is no smaller target worth asking for.',
         );
     });
 

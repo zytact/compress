@@ -70,7 +70,6 @@ export async function initWasm(): Promise<WasmModule> {
 
     initPromise = (async () => {
         try {
-            // Dynamic import of the WASM module
             const wasm =
                 await import('../../public/wasm/image_compress_wasm.js');
             await wasm.default();
@@ -208,112 +207,91 @@ function read(result: Wasm.EncodedImage | Wasm.FitResult): EncodedImage {
  * Convert a File or Blob to Uint8Array
  */
 export async function fileToUint8Array(file: Blob): Promise<ImageBytes> {
+    return new Uint8Array(await file.arrayBuffer());
+}
+
+/** Loads a URL into an image element, rejecting with `failureMessage`. */
+function loadImage(
+    url: string,
+    failureMessage: string,
+): Promise<HTMLImageElement> {
     return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            if (reader.result instanceof ArrayBuffer) {
-                resolve(new Uint8Array(reader.result));
-            } else {
-                reject(new Error('Failed to read file as ArrayBuffer'));
-            }
-        };
-        reader.onerror = () => reject(reader.error);
-        reader.readAsArrayBuffer(file);
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error(failureMessage));
+        image.src = url;
+    });
+}
+
+/** Draws a decoded image at the given size and encodes the canvas as JPEG. */
+function drawToJpeg(
+    image: CanvasImageSource,
+    width: number,
+    height: number,
+    quality: number,
+): Promise<Blob> {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+        throw new Error('Failed to get canvas context');
+    }
+    ctx.drawImage(image, 0, 0);
+
+    return new Promise((resolve, reject) => {
+        canvas.toBlob(
+            (blob) =>
+                blob
+                    ? resolve(blob)
+                    : reject(new Error('Failed to convert canvas to blob')),
+            'image/jpeg',
+            quality,
+        );
     });
 }
 
 /**
- * Convert HEIC/HEIF to JPEG using browser's native decoding (on supported devices)
- * Uses capability-based detection to check if browser supports HEIC
+ * Convert HEIC/HEIF to JPEG using the browser's own decoder, which only some
+ * devices have. Tries `createImageBitmap` first and falls back to an image
+ * element for browsers that decode HEIC only through the document.
  */
 export async function convertHeicToJpeg(
     file: File,
     quality: number = 0.95,
 ): Promise<Blob> {
     try {
-        // Try createImageBitmap first (fast path for modern browsers)
         try {
-            const imageBitmap = await createImageBitmap(file);
-            const canvas = document.createElement('canvas');
-            canvas.width = imageBitmap.width;
-            canvas.height = imageBitmap.height;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) {
-                throw new Error('Failed to get canvas context');
-            }
-            ctx.drawImage(imageBitmap, 0, 0);
-            imageBitmap.close();
-
-            return new Promise<Blob>((resolve, reject) => {
-                canvas.toBlob(
-                    (blob) => {
-                        if (blob) {
-                            resolve(blob);
-                        } else {
-                            reject(
-                                new Error('Failed to convert canvas to blob'),
-                            );
-                        }
-                    },
-                    'image/jpeg',
+            const bitmap = await createImageBitmap(file);
+            try {
+                return await drawToJpeg(
+                    bitmap,
+                    bitmap.width,
+                    bitmap.height,
                     quality,
                 );
-            });
-        } catch (bitmapError) {
-            // Fallback to HTMLImageElement
+            } finally {
+                bitmap.close();
+            }
+        } catch {
             const url = URL.createObjectURL(file);
             try {
-                const img = await new Promise<HTMLImageElement>(
-                    (resolve, reject) => {
-                        const image = new Image();
-                        image.onload = () => resolve(image);
-                        image.onerror = () =>
-                            reject(
-                                new Error(
-                                    'Browser cannot decode HEIC. Please use Safari or convert to JPEG/PNG.',
-                                ),
-                            );
-                        image.src = url;
-                    },
+                const img = await loadImage(
+                    url,
+                    'Browser cannot decode HEIC. Please use Safari or convert to JPEG/PNG.',
                 );
-
-                // Draw to canvas and convert to JPEG
-                const canvas = document.createElement('canvas');
-                canvas.width = img.naturalWidth;
-                canvas.height = img.naturalHeight;
-                const ctx = canvas.getContext('2d');
-                if (!ctx) {
-                    throw new Error('Failed to get canvas context');
-                }
-                ctx.drawImage(img, 0, 0);
+                return await drawToJpeg(
+                    img,
+                    img.naturalWidth,
+                    img.naturalHeight,
+                    quality,
+                );
+            } finally {
                 URL.revokeObjectURL(url);
-
-                return new Promise<Blob>((resolve, reject) => {
-                    canvas.toBlob(
-                        (blob) => {
-                            if (blob) {
-                                resolve(blob);
-                            } else {
-                                reject(
-                                    new Error(
-                                        'Failed to convert canvas to blob',
-                                    ),
-                                );
-                            }
-                        },
-                        'image/jpeg',
-                        quality,
-                    );
-                });
-            } catch (imgError) {
-                URL.revokeObjectURL(url);
-                throw imgError;
             }
         }
     } catch (error) {
-        throw new Error(
-            `HEIC conversion failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
+        throw new Error(`HEIC conversion failed: ${describe(error)}`);
     }
 }
 
@@ -323,14 +301,8 @@ export async function convertHeicToJpeg(
 export async function getImageDimensionsFromUrl(
     url: string,
 ): Promise<{ width: number; height: number }> {
-    return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-            resolve({ width: img.naturalWidth, height: img.naturalHeight });
-        };
-        img.onerror = () => reject(new Error('Failed to load image'));
-        img.src = url;
-    });
+    const img = await loadImage(url, 'Failed to load image');
+    return { width: img.naturalWidth, height: img.naturalHeight };
 }
 
 /**
@@ -403,10 +375,8 @@ export function replaceFileExtension(
 ): string {
     const lastDotIndex = filename.lastIndexOf('.');
     if (lastDotIndex === -1) {
-        // No extension found, append new extension
         return `${filename}.${newExtension}`;
     }
-    // Replace existing extension
     return filename.substring(0, lastDotIndex) + `.${newExtension}`;
 }
 

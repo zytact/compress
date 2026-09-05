@@ -10,14 +10,15 @@ happen in one pass rather than as separate modes.
 Name a target in KB and the app searches for the JPEG quality that lands just
 under it, at whatever width you picked, then hands the slider back to you.
 
-Drag across the image to wipe between the original and the result. Seeing them
-meet at a seam is the only way to judge the detail that quality trades away.
+Drag across the image to wipe between the original and the result, so you can
+see what quality traded away at the seam where the two meet.
 
 Other things it does:
 
 - Converts between JPEG and PNG, or keeps the original format
 - Converts Apple's HEIC images to JPEG using browser-native APIs
-- Never returns a file larger than the source, and says why when it cannot improve on it
+- Returns the original untouched when re-encoding would not make it smaller, and says why
+- Explains when a HEIC source grows, since JPEG cannot always match it
 - Uploads nothing, so your images stay on your device
 - Runs the encoder as Rust compiled to WebAssembly, off the main thread
 
@@ -78,11 +79,14 @@ pnpm run build
 # Preview production build
 pnpm run preview
 
-# Lint code
+# Report lint failures
 pnpm run lint
 
-# Format code
+# Format and auto-fix lint
 pnpm run check
+
+# Run tests
+pnpm run test
 ```
 
 ### Project Structure
@@ -107,15 +111,16 @@ compress/
 4. **Processing**:
     - **By Dimensions**: Resizes to exact W×H with specified quality
     - **By File Size**: Uses binary search to find quality level that hits target size
-5. **Preview**: Display original and compressed images side-by-side
-6. **Download**: Save compressed image with optimized filename
+5. **Preview**: Drag a comparison slider across the original and the result
+6. **Download**: Save the result as `<name>-compressed.<ext>`
 
 ## WASM Module
 
 The core image processing is written in Rust and compiled to WebAssembly using `wasm-bindgen`:
 
-- `resize_by_dimensions()`: Resize to exact dimensions with quality control
-- `resize_by_filesize()`: Binary search for optimal quality to hit target file size
+- `ImageSource`: Decodes an image once and re-encodes it across passes
+- `ImageSource.encode()`: Encode at exact dimensions with quality control
+- `ImageSource.fit_to_filesize()`: Binary search for the quality that hits a target file size
 - Format detection for JPEG/PNG
 - Lanczos3 resampling for high-quality resizing
 
@@ -137,8 +142,8 @@ wasm-pack build --dev --target web --out-dir ../public/wasm
 Contributions are welcome! Please follow these guidelines:
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Run linting (`pnpm run test`)
+2. Create a feature branch (`git checkout -b feat/short-description`)
+3. Run `pnpm check`, `pnpm test` and `pnpm build` before pushing
 4. Commit your changes with descriptive messages
 5. Push to your branch and create a Pull Request
 

@@ -27,7 +27,7 @@ interface NoticeInput {
     settings: CompressionSettings;
 }
 
-/** Below this there is no honest target left to suggest. */
+/** Below this a target size cannot be undercut by a meaningful amount. */
 const SMALLEST_USEFUL_TARGET_KB = 2;
 
 const toKb = (bytes: number) => Math.floor(bytes / 1024);
@@ -39,7 +39,7 @@ const formatLabel = (format: OutputFormat) =>
 function targetAdvice(originalSize: number): string {
     const kb = toKb(originalSize);
     return kb < SMALLEST_USEFUL_TARGET_KB
-        ? 'A file this small has almost nothing left to give.'
+        ? 'This file is already under 2 KB, so there is no smaller target worth asking for.'
         : `Fit to a size under ${kb} KB. Quality stops dropping at ${FIT_QUALITY_FLOOR}, so a very small target can still come up short.`;
 }
 
@@ -76,8 +76,8 @@ export function describeCompression({
     return {
         tone: 'neutral',
         message: dropped
-            ? `Your original is already well compressed. Saving it as ${dropped} at these settings would make it bigger, so we kept your original ${formatLabel(outputFormat)}.`
-            : 'Your original is already well compressed. Saving it at these settings would make it bigger, so we kept the original.',
+            ? `Saving your original as ${dropped} at these settings would not make it any smaller, so we kept your original ${formatLabel(outputFormat)}.`
+            : 'Saving your original at these settings would not make it any smaller, so we kept the original.',
         advice: usesQuality(settings.format, originalFormat)
             ? `Lower the quality below ${settings.quality}, or ${sizeAdvice}.`
             : `Switch to JPEG to trade detail for bytes, or lower ${sizeAdvice}.`,
