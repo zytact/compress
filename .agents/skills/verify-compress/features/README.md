@@ -9,15 +9,15 @@ proof that drives one convenient control is incomplete when the map lists
 others. Keep it honest as the app changes; `/maintain-verification-skill` is the
 loop for that.
 
-| Feature                                     | Where it lives                              | Needs a fixture |
-| ------------------------------------------- | ------------------------------------------- | --------------- |
-| [Image intake](./image-intake.md)           | `file-drop-zone.tsx`, `wasm.ts`             | yes             |
-| [Live compression](./live-compression.md)   | `image-compressor.tsx`, `image-compare.tsx` | yes             |
-| [Frame](./frame.md)                         | `frame-editor.tsx`, `crop.ts`, `wasm/`      | yes             |
-| [Resize](./resize.md)                       | `settings-panel.tsx`                        | yes             |
-| [Format conversion](./format-conversion.md) | `compress.ts`, `compression-notice.ts`      | yes, both       |
-| [Fit to a size](./fit-to-size.md)           | `compress.ts`, `wasm/`                      | yes             |
-| [Download](./download.md)                   | `image-compressor.tsx`                      | yes             |
+| Feature                                     | Where it lives                            | Needs a fixture |
+| ------------------------------------------- | ----------------------------------------- | --------------- |
+| [Image intake](./image-intake.md)           | `file-drop-zone.tsx`, `wasm.ts`           | yes             |
+| [Live compression](./live-compression.md)   | `image-compressor.tsx`, `crop-editor.tsx` | yes             |
+| [Crop](./crop.md)                           | `crop-editor.tsx`, `crop.ts`, `wasm/`     | yes             |
+| [Resize](./resize.md)                       | `settings-panel.tsx`                      | yes             |
+| [Format conversion](./format-conversion.md) | `compress.ts`, `compression-notice.ts`    | yes, both       |
+| [Fit to a size](./fit-to-size.md)           | `compress.ts`, `wasm/`                    | yes             |
+| [Download](./download.md)                   | `image-compressor.tsx`                    | yes             |
 
 Two constraints shape every entry:
 
@@ -28,6 +28,6 @@ Two constraints shape every entry:
   byte readout straight after a click reads the previous result. Wait for the
   number to change, or for the `Compressing` badge to disappear.
 
-One feature is deliberately not in the table. The compare wipe has no output of
-its own, so it is covered as a sub-feature of live compression rather than
+One feature is deliberately not in the table. Hold to see original has no output
+of its own, so it is covered as a sub-feature of live compression rather than
 pretending to be verifiable on its own terms.

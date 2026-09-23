@@ -5,10 +5,8 @@ import { Download } from 'lucide-react';
 
 import { FileDropzone } from './file-drop-zone';
 import { SettingsPanel } from './settings-panel';
-import { FrameEditor } from './frame-editor';
-import { Segmented } from './segmented';
+import { CropEditor } from './crop-editor';
 import { ErrorBanner } from './error-banner';
-import { ImageCompare } from './image-compare';
 import { ByteBar } from './byte-bar';
 import { Button } from './button';
 import type { ImageInfo } from '@/lib/wasm';
@@ -60,8 +58,7 @@ export default function ImageCompressor() {
     const [framing, setFraming] = useState<Framing>(() =>
         centeredFraming(null, 0, 0),
     );
-    const [view, setView] = useState<'compare' | 'frame'>('compare');
-    // The width asked for; the output never exceeds the framed width
+    // The width asked for; the output never exceeds the cropped width
     const [width, setWidth] = useState(0);
     const [outputFormat, setOutputFormat] = useState<OutputFormat>(
         OutputFormat.Original,
@@ -134,7 +131,6 @@ export default function ImageCompressor() {
                 format,
             });
             setFraming(centeredFraming(null, dims.width, dims.height));
-            setView('compare');
             setWidth(dims.width);
             setSourceToken(token);
         } catch (err) {
@@ -353,46 +349,23 @@ export default function ImageCompressor() {
 
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
                 <div className="space-y-5">
-                    <div className="space-y-3">
-                        <div className="w-56">
-                            <Segmented
-                                label="Preview"
-                                value={view}
-                                options={[
-                                    { value: 'compare', label: 'Compare' },
-                                    { value: 'frame', label: 'Frame' },
-                                ]}
-                                onChange={setView}
-                            />
-                        </div>
-                        {view === 'compare' ? (
-                            <ImageCompare
-                                originalUrl={originalPreview}
-                                crop={crop}
-                                sourceWidth={originalInfo.width}
-                                resultUrl={
-                                    // A result cut for another crop would be
-                                    // stretched over this one
-                                    applied && sameCrop(applied.crop, crop)
-                                        ? (compressed?.previewUrl ?? null)
-                                        : null
-                                }
-                                updating={
-                                    (compressing || !settled) && !upToDate
-                                }
-                            />
-                        ) : (
-                            <FrameEditor
-                                imageUrl={originalPreview}
-                                sourceWidth={originalInfo.width}
-                                sourceHeight={originalInfo.height}
-                                framing={framing}
-                                crop={crop}
-                                onFramingChange={handleFramingChange}
-                                outputLabel={`${outputWidth} × ${height}`}
-                            />
-                        )}
-                    </div>
+                    <CropEditor
+                        imageUrl={originalPreview}
+                        sourceWidth={originalInfo.width}
+                        sourceHeight={originalInfo.height}
+                        framing={framing}
+                        crop={crop}
+                        onFramingChange={handleFramingChange}
+                        outputLabel={`${outputWidth} × ${height}`}
+                        resultUrl={
+                            // A result cut for another crop would be
+                            // stretched over this one
+                            applied && sameCrop(applied.crop, crop)
+                                ? (compressed?.previewUrl ?? null)
+                                : null
+                        }
+                        updating={(compressing || !settled) && !upToDate}
+                    />
 
                     <ByteBar
                         originalSize={originalInfo.size_bytes}
@@ -421,18 +394,16 @@ export default function ImageCompressor() {
                 <div className="space-y-4">
                     <SettingsPanel
                         aspect={framing.aspect}
-                        onAspectChange={(aspect) => {
+                        onAspectChange={(aspect) =>
                             handleFramingChange(
                                 centeredFraming(
                                     aspect,
                                     originalInfo.width,
                                     originalInfo.height,
                                 ),
-                            );
-                            setView('frame');
-                        }}
-                        frameWidth={crop.width}
-                        frameHeight={crop.height}
+                            )
+                        }
+                        cropWidth={crop.width}
                         originalFormat={originalFormat}
                         width={outputWidth}
                         height={height}

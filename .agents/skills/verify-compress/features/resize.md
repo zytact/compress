@@ -5,20 +5,20 @@ width interacts with quality rather than preceding it.
 
 ## Sub-features
 
-- **Scale buttons**: 100%, 75%, 50%, 25% of the framed width, which is the
-  original width until a frame shape or zoom narrows it. The active one is
+- **Scale buttons**: 100%, 75%, 50%, 25% of the cropped width, which is the
+  original width until a crop shape or zoom narrows it. The active one is
   highlighted only when the width still equals that scale exactly.
 - **Width field**: a whole-number text input. It is a text input on purpose;
   `number-input.tsx` explains why React's numeric syncing broke it.
-- **Height follows width**: derived from the frame's aspect ratio, floor 1 px.
-  Shown in the `SIZE` section readout as `W × H px`.
-- **Upscale clamp**: typing a width above the framed width clamps to it.
+- **Height follows width**: derived from the crop's aspect ratio, floor 1 px.
+  Shown in the `CROP AND SIZE` readout as `W × H px`.
+- **Upscale clamp**: typing a width above the cropped width clamps to it.
 - **Fit invalidation**: changing the width clears any fit note, because the
   quality it solved for no longer describes what is on screen.
 
 ## How to get to it (user POV)
 
-In the `SIZE` panel, press a scale button or type a width.
+In the `CROP AND SIZE` panel, press a scale button or type a width.
 
 ## Driving it with drive.mjs
 
@@ -29,7 +29,7 @@ D=.agents/skills/verify-compress/scripts/drive.mjs && U="$COMPRESS_APP_URL"
 # 50% is index 2 in the scale group
 node $D eval "$U" 'document.querySelectorAll("[role=radiogroup][aria-label=Scale] [role=radio]")[2].click()'
 sleep 2
-node $D eval "$U" '[...document.querySelectorAll("section")].find(s => s.textContent.startsWith("Size")).innerText.replace(/\n/g," | ")'
+node $D eval "$U" '[...document.querySelectorAll("section")].find(s => s.textContent.startsWith("Crop and size")).innerText.replace(/\n/g," | ")'
 
 # typed width, and the upscale clamp
 node $D fill "$U" 'main label input[inputmode="numeric"]' 640
@@ -41,11 +41,11 @@ node $D eval "$U" 'document.querySelector("main label input[inputmode=numeric]")
 
 ## What proves it works
 
-- The `SIZE` readout tracks the aspect ratio: 50% of 1600x1200 reads
+- The `CROP AND SIZE` readout tracks the aspect ratio: 50% of 1600x1200 reads
   `800 × 600 px`, not `800 × 1200 px`.
 - The encoded image really is that size, not just labelled it:
   `document.querySelector('img[alt=Compressed]').naturalWidth` is 800. The
-  displayed element is stretched to the frame by CSS, so only `naturalWidth`
+  displayed element is stretched to the crop box by CSS, so only `naturalWidth`
   answers this.
 - Typing 9999 leaves the field at 1600. The clamp is in the change handler, so a
   regression shows as a field that accepts the larger number.

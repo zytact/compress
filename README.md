@@ -7,15 +7,15 @@ A fast, privacy-focused image compression and resizing tool that runs entirely i
 Crop, size, format and quality are all live at once, so cropping, resizing and
 re-encoding happen in one pass rather than as separate modes.
 
-Pick a frame shape (1:1, 4:5, 16:9 and so on), then drag and zoom the picture
-under the frame to choose what to keep. The frame is the output, so there is no
-separate crop step before compressing.
+Pick a crop shape (1:1, 4:5, 16:9 and so on), then drag and zoom the image
+under the crop box to choose what to keep. The crop box is the output, so there
+is no separate crop step before compressing.
 
 Name a target in KB and the app searches for the JPEG quality that lands just
 under it, at whatever width you picked, then hands the slider back to you.
 
-Drag across the image to wipe between the original and the result, so you can
-see what quality traded away at the seam where the two meet.
+The crop box shows the compressed result. Hold the button under it, or Space,
+to see the original in its place and spot what quality traded away.
 
 Other things it does:
 
@@ -113,9 +113,9 @@ compress/
 2. **Format Detection**: Browser and WASM detect image format and dimensions
 3. **HEIC Handling**: For HEIC files, browser-native APIs convert to JPEG first
 4. **Processing**:
-    - **By Dimensions**: Crops to the frame, then resizes to exact W×H with specified quality
+    - **By Dimensions**: Crops, then resizes to exact W×H with specified quality
     - **By File Size**: Uses binary search to find quality level that hits target size
-5. **Preview**: Drag a comparison slider across the original and the result, or switch to Frame to reposition the crop
+5. **Preview**: The crop box shows the result; hold to see the original in its place
 6. **Download**: Save the result as `<name>-compressed.<ext>`
 
 ## WASM Module

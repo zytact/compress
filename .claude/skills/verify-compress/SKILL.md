@@ -124,7 +124,7 @@ node $D shot  --full "$U" .local/verify-evidence/run/workspace.png
 `fill` goes through React's own value setter and dispatches `input`, because
 assigning `.value` updates the DOM and leaves React's copy stale. `key` focuses
 the element and sends real key events through CDP, which is how the Radix quality
-slider and the compare handle are driven.
+slider and the zoom slider are driven.
 
 ### Test images
 
@@ -164,7 +164,9 @@ Prefer these, which the source owns:
 | Target size field | `[aria-label="Target size in kilobytes"]`                          |
 | Fit button        | `section:has(input[aria-label="Target size in kilobytes"]) button` |
 | Fit note          | `p[role=status]`                                                   |
-| Compare handle    | `[aria-label="Compare position"]` (`aria-valuenow` is the split %) |
+| Crop shapes       | `[role=radiogroup][aria-label="Crop shape"] [role=radio]`          |
+| Zoom slider       | `[aria-label="Zoom"]` (`aria-valuenow` is the zoom factor)         |
+| Hold for original | `main button:has(kbd)` (or hold Space)                             |
 | Byte readout      | `main [role=img]` (`aria-label` reads "X of the original Y")       |
 | Download button   | `main button:has(svg.lucide-download)`                             |
 | Error banner      | `[role=alert]`                                                     |
@@ -184,7 +186,7 @@ Three things bite when matching text:
   `document.querySelectorAll('button')`. Scope selectors to `main`.
 - **Compression is debounced 300 ms and then runs in a worker.** After moving a
   control, wait for the readout to change rather than reading immediately. The
-  `Compressing` badge inside the compare frame is the in-flight signal.
+  `Compressing` badge inside the crop box is the in-flight signal.
 
 Server rendering shapes the harness in one more place. `upload` waits for React
 to stamp `__reactProps$` onto the target input before setting files, because the
