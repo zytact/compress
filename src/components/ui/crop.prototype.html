@@ -1,0 +1,756 @@
+<!doctype html>
+<!--
+    PROTOTYPE, throwaway. Three ways to fold cropping into the editor, switchable
+    via ?variant=A|B|C and the floating bar (or the arrow keys). Open the file
+    directly in a browser. Nothing here is wired to the real encoder; sizes are
+    rough estimates.
+-->
+<html lang="en" class="dark">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Compress - crop prototype</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+            rel="stylesheet"
+            href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap"
+        />
+        <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+        <style type="text/tailwindcss">
+            @custom-variant dark (&:is(.dark *));
+            :root {
+                --background: #f6f7fa;
+                --foreground: #0f131b;
+                --card: #ffffff;
+                --primary: #3d6b4f;
+                --primary-foreground: #ffffff;
+                --muted: #eef0f5;
+                --muted-foreground: #5a6373;
+                --border: #dce0e9;
+                --ring: #3d6b4f;
+                --source: #0b8ea3;
+                --source-soft: #0b8ea31f;
+                --result: #3d6b4f;
+                --signal: #a56a0a;
+                --signal-soft: #a56a0a1a;
+            }
+            .dark {
+                --background: #0b0e14;
+                --foreground: #e6eaf2;
+                --card: #12161f;
+                --primary: #8fb69e;
+                --primary-foreground: #0e1a12;
+                --muted: #171d27;
+                --muted-foreground: #8c95a6;
+                --border: #232b38;
+                --ring: #8fb69e;
+                --source: #35d6e8;
+                --source-soft: #35d6e824;
+                --result: #8fb69e;
+                --signal: #f5c542;
+                --signal-soft: #f5c5421f;
+            }
+            @theme inline {
+                --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+                --font-sans: 'Inter Tight', ui-sans-serif, system-ui, sans-serif;
+                --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+                --color-background: var(--background);
+                --color-foreground: var(--foreground);
+                --color-card: var(--card);
+                --color-primary: var(--primary);
+                --color-primary-foreground: var(--primary-foreground);
+                --color-muted: var(--muted);
+                --color-muted-foreground: var(--muted-foreground);
+                --color-border: var(--border);
+                --color-ring: var(--ring);
+                --color-source: var(--source);
+                --color-source-soft: var(--source-soft);
+                --color-result: var(--result);
+                --color-signal: var(--signal);
+                --color-signal-soft: var(--signal-soft);
+            }
+            @layer base {
+                * {
+                    @apply border-border;
+                }
+                body {
+                    @apply m-0 bg-background font-sans text-foreground antialiased;
+                }
+                .font-mono {
+                    font-variant-numeric: tabular-nums;
+                }
+            }
+            .checker {
+                background-color: #fff;
+                background-image:
+                    linear-gradient(45deg, #ddd 25%, transparent 25%),
+                    linear-gradient(-45deg, #ddd 25%, transparent 25%),
+                    linear-gradient(45deg, transparent 75%, #ddd 75%),
+                    linear-gradient(-45deg, transparent 75%, #ddd 75%);
+                background-size: 16px 16px;
+                background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+            }
+        </style>
+    </head>
+    <body class="flex min-h-screen flex-col">
+        <header
+            class="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-4 sm:px-6"
+        >
+            <span class="font-display text-xl font-extrabold">compress</span>
+            <button
+                data-act="theme"
+                class="border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+                Theme
+            </button>
+        </header>
+        <main id="app" class="flex-1 pb-28"></main>
+
+        <div
+            class="fixed inset-x-0 bottom-5 z-50 mx-auto flex w-fit items-center gap-1 rounded-full bg-white px-2 py-1.5 font-sans text-sm text-black shadow-[0_8px_30px_rgba(0,0,0,.45)] ring-1 ring-black/10"
+        >
+            <button data-act="prev" class="rounded-full px-3 py-1 hover:bg-black/10">←</button>
+            <span id="variant-label" class="min-w-64 text-center font-medium"></span>
+            <button data-act="next" class="rounded-full px-3 py-1 hover:bg-black/10">→</button>
+        </div>
+
+        <script>
+            const W = 4032;
+            const H = 3024;
+            const SOURCE_BYTES = 3_480_000;
+            const MIN = 64;
+
+            const SCENE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}">
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#18223d"/><stop offset=".55" stop-color="#7a4f6d"/><stop offset="1" stop-color="#f2a766"/></linearGradient>
+<linearGradient id="lake" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b2785f"/><stop offset=".35" stop-color="#3a4a6b"/><stop offset="1" stop-color="#121a2b"/></linearGradient>
+</defs>
+<rect width="${W}" height="1950" fill="url(#sky)"/>
+<circle cx="2900" cy="1560" r="250" fill="#ffd9a0"/>
+<polygon points="0,1500 500,1050 900,1300 1400,820 1900,1350 2300,1100 2700,1450 3200,980 3700,1400 4032,1150 4032,1950 0,1950" fill="#4b4a6e"/>
+<polygon points="0,1950 0,1650 600,1400 1100,1700 1600,1500 2200,1800 2800,1600 3400,1850 4032,1600 4032,1950" fill="#2a2c45"/>
+<rect y="1950" width="${W}" height="1074" fill="url(#lake)"/>
+<g fill="#ffd9a0" opacity=".5"><rect x="2760" y="2000" width="280" height="18"/><rect x="2800" y="2080" width="200" height="14"/><rect x="2840" y="2160" width="120" height="10"/><rect x="2870" y="2240" width="60" height="8"/></g>
+<g fill="#0d1220"><rect x="560" y="1500" width="60" height="520"/><polygon points="590,900 360,1560 820,1560"/><polygon points="590,1150 300,1800 880,1800"/></g>
+<g fill="#0d1220"><polygon points="2150,2380 2650,2380 2560,2470 2240,2470"/><rect x="2390" y="2050" width="16" height="330"/><polygon points="2406,2070 2406,2340 2600,2340"/></g>
+<g fill="none" stroke="#ffffff" stroke-opacity=".08" stroke-width="6"><path d="M0 2600 Q1000 2560 2000 2620 T4032 2600"/><path d="M0 2800 Q1200 2760 2200 2820 T4032 2790"/></g>
+</svg>`;
+            const IMG = `data:image/svg+xml;utf8,${encodeURIComponent(SCENE)}`;
+
+            const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+            const round = Math.round;
+            const fmtBytes = (b) =>
+                b >= 1e6 ? `${(b / 1e6).toFixed(2)} MB` : `${(b / 1e3).toFixed(0)} KB`;
+            const fmtRatio = (r) => {
+                for (const [label, v] of RATIO_NAMES) if (Math.abs(r - v) < 0.01) return label;
+                return r.toFixed(2);
+            };
+            const RATIO_NAMES = [
+                ['1:1', 1],
+                ['4:3', 4 / 3],
+                ['3:4', 3 / 4],
+                ['4:5', 4 / 5],
+                ['3:2', 3 / 2],
+                ['16:9', 16 / 9],
+                ['9:16', 9 / 16],
+                ['1.91:1', 1200 / 630],
+            ];
+
+            // Largest rect of aspect `ar` centred in the source
+            const cover = (ar) => {
+                let w = W;
+                let h = W / ar;
+                if (h > H) {
+                    h = H;
+                    w = H * ar;
+                }
+                return { x: (W - w) / 2, y: (H - h) / 2, w, h };
+            };
+
+            const shared = { format: 'jpeg', quality: 85 };
+
+            const estimate = (w, h) => {
+                const q = shared.quality / 100;
+                const bpp = shared.format === 'png' ? 1.6 : 0.012 + 0.26 * q ** 3;
+                return round(w * h * bpp);
+            };
+
+            // ---------- shared chrome ----------
+
+            const section = (title, readout, body) => `
+<section class="space-y-3 p-4">
+  <div class="flex items-baseline justify-between gap-3">
+    <h2 class="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">${title}</h2>
+    ${readout ? `<span class="font-mono text-sm tabular-nums">${readout}</span>` : ''}
+  </div>
+  ${body}
+</section>`;
+
+            const segmented = (act, options, current) => `
+<div class="flex flex-wrap gap-1 bg-muted p-1">
+  ${options
+      .map(
+          ([value, label]) => `<button data-act="${act}" data-arg="${value}" class="flex-1 px-2 py-1.5 text-sm font-medium whitespace-nowrap transition-colors ${
+              String(value) === String(current)
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+          }">${label}</button>`,
+      )
+      .join('')}
+</div>`;
+
+            const numberField = (id, label, value, unit = 'px') => `
+<label class="flex items-center gap-3">
+  ${label ? `<span class="w-14 shrink-0 text-sm text-muted-foreground">${label}</span>` : ''}
+  <input id="${id}" data-input="${id}" inputmode="numeric" value="${value}" class="w-full min-w-0 border border-border bg-background px-3 py-2 font-mono text-sm tabular-nums focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:outline-none"/>
+  ${unit ? `<span class="shrink-0 font-mono text-sm text-muted-foreground">${unit}</span>` : ''}
+</label>`;
+
+            const note = (text) => `<p class="text-xs text-muted-foreground">${text}</p>`;
+
+            const formatAndQuality = () => `
+${section('Format', '', segmented('format', [['keep', 'Keep original'], ['jpeg', 'JPEG'], ['png', 'PNG']], shared.format))}
+${
+    shared.format === 'png'
+        ? section('Quality', '', `<p class="text-sm text-muted-foreground">PNG keeps every pixel exactly as it is, so there is no quality to trade.</p>`)
+        : `${section(
+              'Quality',
+              shared.quality,
+              `<input type="range" min="1" max="100" data-input="quality" id="quality" value="${shared.quality}" class="w-full accent-[var(--primary)]"/>
+               <div class="flex justify-between text-xs text-muted-foreground"><span>Smaller file</span><span>Sharper picture</span></div>`,
+          )}
+           ${section(
+               'Fit to a size',
+               '',
+               `<div class="flex items-center gap-3">
+                  <input value="500" class="w-full border border-border bg-background px-3 py-2 font-mono text-sm"/>
+                  <span class="font-mono text-sm text-muted-foreground">KB</span>
+                  <button class="shrink-0 border border-border px-3 py-2 text-sm font-medium">Fit</button>
+                </div>`,
+           )}`
+}`;
+
+            const byteBar = (outW, outH) => {
+                const size = estimate(outW, outH);
+                const ratio = size / SOURCE_BYTES;
+                const grew = ratio > 1;
+                return `
+<div class="space-y-3">
+  <div class="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+    <div class="flex items-end gap-3 font-mono">
+      <span class="block"><span class="block text-[0.6875rem] tracking-widest text-source uppercase">Original</span><span class="block text-lg font-medium">${fmtBytes(SOURCE_BYTES)}</span></span>
+      <span class="pb-0.5 text-muted-foreground">→</span>
+      <span class="block"><span class="block text-[0.6875rem] tracking-widest text-result uppercase">Compressed</span><span class="block text-lg font-medium">${fmtBytes(size)}</span></span>
+    </div>
+    <p class="text-right ${grew ? 'text-signal' : 'text-result'}">
+      <span class="block font-mono text-4xl leading-none font-bold tracking-tight sm:text-5xl">${Math.abs(round((1 - ratio) * 100))}%</span>
+      <span class="block text-[0.6875rem] tracking-widest uppercase">${grew ? 'larger' : 'smaller'}</span>
+    </p>
+  </div>
+  <div class="h-2 overflow-hidden bg-source-soft"><div style="width:${Math.min(100, ratio * 100)}%" class="h-full ${grew ? 'bg-signal' : 'bg-result'}"></div></div>
+</div>`;
+            };
+
+            // The editor page as it is today, with the preview and the size
+            // controls handed in by each variant
+            const page = ({ preview, panelTop, outW, outH, state }) => `
+<div class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+  <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+    <p class="min-w-0 text-sm">
+      <span class="block truncate font-medium">IMG_2231.jpg</span>
+      <span class="font-mono text-xs text-muted-foreground">${W} × ${H} · JPEG · ${fmtBytes(SOURCE_BYTES)}</span>
+    </p>
+    <button class="border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">Choose another image</button>
+  </div>
+  <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+    <div class="space-y-5">
+      ${preview}
+      ${byteBar(outW, outH)}
+      <pre class="overflow-x-auto border border-dashed border-border p-2 font-mono text-[0.6875rem] text-muted-foreground">prototype state  output ${outW} × ${outH}
+${JSON.stringify(state)}</pre>
+    </div>
+    <div class="space-y-4">
+      <div class="divide-y divide-border border border-border bg-card">
+        ${panelTop}
+        ${formatAndQuality()}
+      </div>
+      <button class="flex w-full items-center justify-center gap-2 bg-primary px-4 py-3 text-sm font-medium text-primary-foreground">↓ Download ${fmtBytes(estimate(outW, outH))}</button>
+      <p class="text-center text-xs text-muted-foreground">Nothing leaves this tab.</p>
+    </div>
+  </div>
+</div>`;
+
+            // Source image with everything outside `rect` dimmed
+            const windowed = (rect, { handles = false, edges = false, grid = true } = {}) => {
+                const pct = (v, total) => `${(v / total) * 100}%`;
+                const corner = (pos, cls) =>
+                    `<span data-drag="${pos}" class="absolute ${cls} size-4 border-2 border-white bg-black/40"></span>`;
+                const edge = (pos, cls) =>
+                    `<span data-drag="${pos}" class="absolute ${cls} bg-white"></span>`;
+                return `
+<div id="stage" class="relative overflow-hidden border border-border bg-muted select-none touch-none">
+  <img src="${IMG}" draggable="false" class="block h-auto w-full"/>
+  <div ${handles ? 'data-drag="move"' : ''} class="absolute ${handles ? 'cursor-move' : ''} outline outline-1 outline-white/90"
+       style="left:${pct(rect.x, W)};top:${pct(rect.y, H)};width:${pct(rect.w, W)};height:${pct(rect.h, H)};box-shadow:0 0 0 9999px rgb(0 0 0 / .6)">
+    ${
+        grid
+            ? `<div class="pointer-events-none absolute inset-0 grid grid-cols-3 grid-rows-3">${'<div class="border-r border-b border-white/25"></div>'.repeat(9)}</div>`
+            : ''
+    }
+    ${
+        handles
+            ? corner('nw', '-top-2 -left-2 cursor-nwse-resize') +
+              corner('ne', '-top-2 -right-2 cursor-nesw-resize') +
+              corner('sw', '-bottom-2 -left-2 cursor-nesw-resize') +
+              corner('se', '-right-2 -bottom-2 cursor-nwse-resize')
+            : ''
+    }
+    ${
+        edges
+            ? edge('n', '-top-[3px] left-1/2 h-1.5 w-8 -translate-x-1/2 cursor-ns-resize') +
+              edge('s', '-bottom-[3px] left-1/2 h-1.5 w-8 -translate-x-1/2 cursor-ns-resize') +
+              edge('w', 'top-1/2 -left-[3px] h-8 w-1.5 -translate-y-1/2 cursor-ew-resize') +
+              edge('e', 'top-1/2 -right-[3px] h-8 w-1.5 -translate-y-1/2 cursor-ew-resize')
+            : ''
+    }
+  </div>
+</div>`;
+            };
+
+            // Just the pixels inside `rect`, as the result would show them
+            const cropped = (rect, label) => `
+<div class="relative overflow-hidden border border-border bg-muted" style="aspect-ratio:${rect.w}/${rect.h}">
+  <img src="${IMG}" draggable="false" class="absolute max-w-none"
+       style="width:${(W / rect.w) * 100}%;left:${(-rect.x / rect.w) * 100}%;top:${(-rect.y / rect.h) * 100}%"/>
+  <span class="absolute top-3 right-3 bg-background/85 px-2.5 py-1 font-mono text-[0.6875rem] tracking-widest text-result uppercase">${label}</span>
+</div>`;
+
+            // ---------- Variant A: crop box on the preview ----------
+
+            const A = {
+                crop: { x: 0, y: 0, w: W, h: H },
+                aspect: 'free',
+                view: 'crop',
+                scale: 1,
+            };
+            const aspectOf = (a) => (a === 'free' ? null : a === 'orig' ? W / H : Number(a));
+            const A_ASPECTS = [
+                ['free', 'Free'],
+                ['orig', 'Original'],
+                [1, '1:1'],
+                [4 / 5, '4:5'],
+                [16 / 9, '16:9'],
+            ];
+
+            const variantA = {
+                name: 'Crop box on the preview',
+                render() {
+                    const c = A.crop;
+                    const outW = Math.max(1, round(c.w * A.scale));
+                    const outH = Math.max(1, round((outW * c.h) / c.w));
+                    const tabs = segmented('a-view', [['crop', 'Crop'], ['compare', 'Compare']], A.view);
+                    const preview = `
+<div class="space-y-2">
+  <div class="w-56">${tabs}</div>
+  ${A.view === 'crop' ? windowed(c, { handles: true, edges: A.aspect === 'free' }) : cropped(c, 'Compressed')}
+  ${note(A.view === 'crop' ? 'Drag the box to move it, the corners to resize. Switch to Compare to check quality.' : 'Showing only the cropped area.')}
+</div>`;
+                    const scales = [1, 0.75, 0.5, 0.25];
+                    const panelTop = `
+${section(
+    'Crop',
+    `${round(c.w)} × ${round(c.h)}`,
+    `${segmented('a-aspect', A_ASPECTS, A.aspect)}
+     <div class="grid grid-cols-2 gap-2">
+       ${numberField('a-cw', 'W', round(c.w), '')}
+       ${numberField('a-ch', 'H', round(c.h), '')}
+     </div>
+     <button data-act="a-reset" class="text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground">Reset crop</button>`,
+)}
+${section(
+    'Size',
+    `${outW} × ${outH} px`,
+    `${segmented('a-scale', scales.map((s) => [s, `${s * 100}%`]), scales.includes(A.scale) ? A.scale : '')}
+     ${numberField('a-w', 'Width', outW)}
+     ${note(`Scales the cropped area. Height follows the crop.`)}`,
+)}`;
+                    return page({ preview, panelTop, outW, outH, state: { crop: roundRect(c), aspect: A.aspect, scale: A.scale } });
+                },
+                act: {
+                    'a-view': (v) => (A.view = v),
+                    'a-aspect': (v) => {
+                        A.aspect = v;
+                        const ar = aspectOf(v);
+                        if (ar) A.crop = cover(ar);
+                    },
+                    'a-scale': (v) => (A.scale = Number(v)),
+                    'a-reset': () => {
+                        A.crop = { x: 0, y: 0, w: W, h: H };
+                        A.aspect = 'free';
+                    },
+                },
+                input: {
+                    'a-w': (v) => (A.scale = clamp(v / A.crop.w, 0.01, 1)),
+                    'a-cw': (v) => resizeCentered(clamp(v, MIN, W), null),
+                    'a-ch': (v) => resizeCentered(null, clamp(v, MIN, H)),
+                },
+                drag(kind, start, p, dSrc) {
+                    const s = start.crop;
+                    const ar = aspectOf(A.aspect);
+                    if (kind === 'move') {
+                        A.crop = {
+                            ...s,
+                            x: clamp(s.x + dSrc.x, 0, W - s.w),
+                            y: clamp(s.y + dSrc.y, 0, H - s.h),
+                        };
+                        return;
+                    }
+                    if (kind.length === 2) {
+                        const ax = kind[1] === 'w' ? s.x + s.w : s.x;
+                        const ay = kind[0] === 'n' ? s.y + s.h : s.y;
+                        let w = Math.max(MIN, Math.abs(p.x - ax));
+                        let h = Math.max(MIN, Math.abs(p.y - ay));
+                        if (ar) {
+                            if (w / h > ar) w = h * ar;
+                            else h = w / ar;
+                        }
+                        w = Math.min(w, kind[1] === 'w' ? ax : W - ax);
+                        h = Math.min(h, kind[0] === 'n' ? ay : H - ay);
+                        if (ar) {
+                            if (w / h > ar) w = h * ar;
+                            else h = w / ar;
+                        }
+                        A.crop = {
+                            x: kind[1] === 'w' ? ax - w : ax,
+                            y: kind[0] === 'n' ? ay - h : ay,
+                            w,
+                            h,
+                        };
+                        return;
+                    }
+                    const r = { ...s };
+                    if (kind === 'n') {
+                        r.y = Math.min(p.y, s.y + s.h - MIN);
+                        r.h = s.y + s.h - r.y;
+                    }
+                    if (kind === 's') r.h = Math.max(MIN, p.y - s.y);
+                    if (kind === 'w') {
+                        r.x = Math.min(p.x, s.x + s.w - MIN);
+                        r.w = s.x + s.w - r.x;
+                    }
+                    if (kind === 'e') r.w = Math.max(MIN, p.x - s.x);
+                    A.crop = r;
+                },
+                dragStart: () => ({ crop: { ...A.crop } }),
+            };
+
+            // Typing one side keeps the centre, and the aspect if one is picked
+            function resizeCentered(w, h) {
+                const c = A.crop;
+                const ar = aspectOf(A.aspect);
+                let nw = w ?? (ar ? h * ar : c.w);
+                let nh = h ?? (ar ? w / ar : c.h);
+                if (nw > W) (nh = ar ? W / ar : nh), (nw = W);
+                if (nh > H) (nw = ar ? H * ar : nw), (nh = H);
+                const cx = c.x + c.w / 2;
+                const cy = c.y + c.h / 2;
+                A.crop = {
+                    w: nw,
+                    h: nh,
+                    x: clamp(cx - nw / 2, 0, W - nw),
+                    y: clamp(cy - nh / 2, 0, H - nh),
+                };
+            }
+
+            const roundRect = (r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, round(v)]));
+
+            // ---------- Variant B: exact output size, pick what to keep ----------
+
+            const B = { w: W, h: H, lock: true, fill: 'crop', anchor: [0.5, 0.5] };
+            const B_PRESETS = [
+                ['Original', W, H],
+                ['Square 1080', 1080, 1080],
+                ['Portrait 1080 × 1350', 1080, 1350],
+                ['HD 1920 × 1080', 1920, 1080],
+                ['Link preview 1200 × 630', 1200, 630],
+            ];
+
+            const variantB = {
+                name: 'Exact size, then pick what to keep',
+                render() {
+                    const { w, h } = B;
+                    const sameAspect = Math.abs(w / h - W / H) < 0.005;
+                    const s = Math.max(w / W, h / H);
+                    const keep = { w: w / s, h: h / s };
+                    keep.x = (W - keep.w) * B.anchor[0];
+                    keep.y = (H - keep.h) * B.anchor[1];
+
+                    let preview;
+                    let explain;
+                    if (sameAspect || B.fill === 'stretch') {
+                        preview = `<div class="relative overflow-hidden border border-border" style="aspect-ratio:${w}/${h}"><img src="${IMG}" class="absolute inset-0 h-full w-full"/></div>`;
+                        explain = sameAspect ? 'Same shape as the original, nothing is cut.' : 'The whole picture, squashed to fit.';
+                    } else if (B.fill === 'crop') {
+                        preview = `<div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_10rem] items-start">${windowed(keep, { grid: false })}${cropped(keep, 'Result')}</div>`;
+                        const trimX = round(W - keep.w);
+                        const trimY = round(H - keep.h);
+                        explain = `Keeps ${round(keep.w)} × ${round(keep.h)} of the source and trims ${trimX ? `${trimX} px from the sides` : `${trimY} px from top and bottom`}.`;
+                    } else {
+                        const fs = Math.min(w / W, h / H);
+                        preview = `<div class="checker relative mx-auto max-h-[32rem] overflow-hidden border border-border" style="aspect-ratio:${w}/${h}"><img src="${IMG}" class="absolute inset-0 h-full w-full object-contain"/></div>`;
+                        explain = `The whole picture at ${round(W * fs)} × ${round(H * fs)}, padded to ${w} × ${h}. PNG keeps the padding transparent, JPEG fills it white.`;
+                    }
+                    const upscale = s > 1 ? ` <span class="text-signal">Upscales ${s.toFixed(2)}×.</span>` : '';
+
+                    const anchorGrid = `
+<div class="flex items-center gap-3">
+  <div class="grid grid-cols-3 gap-1 bg-muted p-1">
+    ${[0, 0.5, 1]
+        .flatMap((y) =>
+            [0, 0.5, 1].map(
+                (x) => `<button data-act="b-anchor" data-arg="${x},${y}" class="size-6 ${
+                    B.anchor[0] === x && B.anchor[1] === y ? 'bg-primary' : 'bg-card hover:bg-border'
+                }"></button>`,
+            ),
+        )
+        .join('')}
+  </div>
+  ${note('Which part of the picture to keep.')}
+</div>`;
+
+                    const panelTop = section(
+                        'Size',
+                        `${w} × ${h} px`,
+                        `<div class="flex flex-wrap gap-1">${B_PRESETS.map(
+                            ([label, pw, ph]) =>
+                                `<button data-act="b-preset" data-arg="${pw},${ph}" class="border px-2 py-1 text-xs ${
+                                    pw === w && ph === h ? 'border-ring text-foreground' : 'border-border text-muted-foreground hover:text-foreground'
+                                }">${label}</button>`,
+                        ).join('')}</div>
+                         <div class="flex items-center gap-2">
+                           <div class="flex-1">${numberField('b-w', '', w, 'W')}</div>
+                           <button data-act="b-lock" title="Keep proportions" class="border px-2 py-2 text-sm ${B.lock ? 'border-ring text-foreground' : 'border-border text-muted-foreground'}">${B.lock ? '🔗' : '⛓️‍💥'}</button>
+                           <div class="flex-1">${numberField('b-h', '', h, 'H')}</div>
+                         </div>
+                         ${
+                             sameAspect
+                                 ? note('Unlock the chain to pick a different shape.')
+                                 : `${segmented('b-fill', [['crop', 'Crop'], ['fit', 'Fit'], ['stretch', 'Stretch']], B.fill)}
+                                    ${B.fill === 'crop' ? anchorGrid : ''}`
+                         }`,
+                    );
+
+                    return page({
+                        preview: `<div class="space-y-2">${preview}<p class="text-xs text-muted-foreground">${explain}${upscale}</p></div>`,
+                        panelTop,
+                        outW: w,
+                        outH: h,
+                        state: B,
+                    });
+                },
+                act: {
+                    'b-preset': (v) => {
+                        const [w, h] = v.split(',').map(Number);
+                        B.w = w;
+                        B.h = h;
+                        B.lock = Math.abs(w / h - W / H) < 0.005;
+                    },
+                    'b-lock': () => {
+                        B.lock = !B.lock;
+                        if (B.lock) B.h = Math.max(1, round((B.w * H) / W));
+                    },
+                    'b-fill': (v) => (B.fill = v),
+                    'b-anchor': (v) => (B.anchor = v.split(',').map(Number)),
+                },
+                input: {
+                    'b-w': (v) => {
+                        B.w = Math.max(1, v);
+                        if (B.lock) B.h = Math.max(1, round((B.w * H) / W));
+                    },
+                    'b-h': (v) => {
+                        B.h = Math.max(1, v);
+                        if (B.lock) B.w = Math.max(1, round((B.h * W) / H));
+                    },
+                },
+            };
+
+            // ---------- Variant C: fixed frame, move the picture ----------
+
+            const C = { ar: W / H, zoom: 1, cx: W / 2, cy: H / 2, scale: 1 };
+            const C_ASPECTS = [
+                [W / H, 'Original'],
+                [1, '1:1'],
+                [4 / 5, '4:5'],
+                [3 / 2, '3:2'],
+                [16 / 9, '16:9'],
+                [9 / 16, '9:16'],
+            ];
+            // The stage is 4:3; the frame sits inside it with room to see what is cut
+            const STAGE_H = 75;
+
+            const cRect = () => {
+                const base = cover(C.ar);
+                const w = base.w / C.zoom;
+                const h = base.h / C.zoom;
+                C.cx = clamp(C.cx, w / 2, W - w / 2);
+                C.cy = clamp(C.cy, h / 2, H - h / 2);
+                return { x: C.cx - w / 2, y: C.cy - h / 2, w, h };
+            };
+            const cFrame = () => {
+                const fw = Math.min(84, STAGE_H * 0.84 * C.ar);
+                const fh = fw / C.ar;
+                return { fw, fh, left: (100 - fw) / 2, top: (STAGE_H - fh) / 2 };
+            };
+
+            const variantC = {
+                name: 'Fixed frame, move the picture',
+                render() {
+                    const r = cRect();
+                    const f = cFrame();
+                    const s = f.fw / r.w;
+                    const v = (u) => `${(u / STAGE_H) * 100}%`;
+                    const outW = Math.max(1, round(r.w * C.scale));
+                    const outH = Math.max(1, round(outW / C.ar));
+                    const preview = `
+<div class="space-y-2">
+  <div id="stage" data-drag="pan" class="relative cursor-grab overflow-hidden border border-border bg-muted select-none touch-none active:cursor-grabbing" style="aspect-ratio:4/3">
+    <img src="${IMG}" draggable="false" class="pointer-events-none absolute max-w-none"
+         style="left:${f.left - r.x * s}%;top:${v(f.top - r.y * s)};width:${W * s}%;height:${v(H * s)}"/>
+    <div class="pointer-events-none absolute outline outline-1 outline-white" style="left:${f.left}%;top:${v(f.top)};width:${f.fw}%;height:${v(f.fh)};box-shadow:0 0 0 9999px rgb(11 14 20 / .72)">
+      <div class="absolute inset-0 grid grid-cols-3 grid-rows-3">${'<div class="border-r border-b border-white/20"></div>'.repeat(9)}</div>
+      <span class="absolute -top-7 left-0 font-mono text-[0.6875rem] tracking-widest text-white/80 uppercase">${outW} × ${outH}</span>
+    </div>
+  </div>
+  <div class="flex items-center gap-3">
+    <span class="font-mono text-xs text-muted-foreground">−</span>
+    <input type="range" min="1" max="4" step="0.01" id="c-zoom" data-input="c-zoom" value="${C.zoom}" class="w-full accent-[var(--primary)]"/>
+    <span class="font-mono text-xs text-muted-foreground">+</span>
+    <span class="w-12 text-right font-mono text-xs">${round(C.zoom * 100)}%</span>
+  </div>
+  ${note('Drag the picture to position it, scroll or use the slider to zoom. The frame is the output.')}
+</div>`;
+                    const scales = [1, 0.75, 0.5, 0.25];
+                    const panelTop = section(
+                        'Frame',
+                        `${outW} × ${outH} px`,
+                        `${segmented('c-ar', C_ASPECTS, C_ASPECTS.find(([a]) => Math.abs(a - C.ar) < 1e-6)?.[0] ?? '')}
+                         ${segmented('c-scale', scales.map((sc) => [sc, `${sc * 100}%`]), scales.includes(C.scale) ? C.scale : '')}
+                         ${numberField('c-w', 'Width', outW)}
+                         ${note(`Uses ${round(r.w)} × ${round(r.h)} of the source. Height follows the frame, and it stops at ${round(r.w)} px so no pixels get invented.`)}`,
+                    );
+                    return page({ preview, panelTop, outW, outH, state: { ...roundRect(r), zoom: +C.zoom.toFixed(2), ratio: fmtRatio(C.ar), scale: +C.scale.toFixed(3) } });
+                },
+                act: {
+                    'c-ar': (v) => {
+                        C.ar = Number(v);
+                        C.zoom = 1;
+                    },
+                    'c-scale': (v) => (C.scale = Number(v)),
+                },
+                input: {
+                    'c-zoom': (v) => (C.zoom = clamp(v, 1, 4)),
+                    'c-w': (v) => (C.scale = clamp(v / cRect().w, 0.01, 1)),
+                },
+                dragStart: () => ({ cx: C.cx, cy: C.cy, s: cFrame().fw / cRect().w }),
+                drag(kind, start, _p, _d, dPx, stageW) {
+                    const perSource = (stageW / 100) * start.s;
+                    C.cx = start.cx - dPx.x / perSource;
+                    C.cy = start.cy - dPx.y / perSource;
+                },
+                wheel(dy) {
+                    C.zoom = clamp(C.zoom * Math.exp(-dy * 0.0015), 1, 4);
+                },
+            };
+
+            // ---------- switcher and events ----------
+
+            const VARIANTS = { A: variantA, B: variantB, C: variantC };
+            const KEYS = Object.keys(VARIANTS);
+            let key = new URLSearchParams(location.search).get('variant')?.toUpperCase();
+            if (!KEYS.includes(key)) key = 'A';
+
+            const render = () => {
+                const focused = document.activeElement?.id;
+                const caret = document.activeElement?.selectionStart;
+                document.getElementById('app').innerHTML = VARIANTS[key].render();
+                document.getElementById('variant-label').textContent = `${key} (${VARIANTS[key].name})`;
+                const el = focused && document.getElementById(focused);
+                if (el) {
+                    el.focus();
+                    if (caret != null && el.type === 'text') el.setSelectionRange(caret, caret);
+                }
+            };
+
+            const go = (step) => {
+                key = KEYS[(KEYS.indexOf(key) + step + KEYS.length) % KEYS.length];
+                const url = new URL(location.href);
+                url.searchParams.set('variant', key);
+                history.replaceState(null, '', url);
+                render();
+            };
+
+            document.addEventListener('click', (e) => {
+                const t = e.target.closest('[data-act]');
+                if (!t) return;
+                const act = t.dataset.act;
+                if (act === 'prev') return go(-1);
+                if (act === 'next') return go(1);
+                if (act === 'theme') return document.documentElement.classList.toggle('dark');
+                if (act === 'format') shared.format = t.dataset.arg;
+                else VARIANTS[key].act?.[act]?.(t.dataset.arg);
+                render();
+            });
+
+            document.addEventListener('input', (e) => {
+                const id = e.target.dataset.input;
+                if (!id) return;
+                const value = Number(String(e.target.value).replace(/[^\d.]/g, '')) || 0;
+                if (id === 'quality') shared.quality = value;
+                else VARIANTS[key].input?.[id]?.(value);
+                render();
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.target.closest('input, textarea, [contenteditable]')) return;
+                if (e.key === 'ArrowLeft') go(-1);
+                if (e.key === 'ArrowRight') go(1);
+            });
+
+            let drag = null;
+            document.addEventListener('pointerdown', (e) => {
+                const t = e.target.closest('[data-drag]');
+                const v = VARIANTS[key];
+                if (!t || !v.drag) return;
+                e.preventDefault();
+                const stage = document.getElementById('stage').getBoundingClientRect();
+                drag = { kind: t.dataset.drag, stage, x0: e.clientX, y0: e.clientY, start: v.dragStart() };
+            });
+            window.addEventListener('pointermove', (e) => {
+                if (!drag) return;
+                const { stage, x0, y0 } = drag;
+                const toSrc = W / stage.width;
+                const p = {
+                    x: clamp((e.clientX - stage.left) * toSrc, 0, W),
+                    y: clamp((e.clientY - stage.top) * toSrc, 0, H),
+                };
+                const dPx = { x: e.clientX - x0, y: e.clientY - y0 };
+                VARIANTS[key].drag(drag.kind, drag.start, p, { x: dPx.x * toSrc, y: dPx.y * toSrc }, dPx, stage.width);
+                render();
+            });
+            window.addEventListener('pointerup', () => (drag = null));
+            window.addEventListener(
+                'wheel',
+                (e) => {
+                    const v = VARIANTS[key];
+                    if (!v.wheel || !e.target.closest('#stage')) return;
+                    e.preventDefault();
+                    v.wheel(e.deltaY);
+                    render();
+                },
+                { passive: false },
+            );
+
+            render();
+        </script>
+    </body>
+</html>
