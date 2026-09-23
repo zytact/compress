@@ -15,7 +15,11 @@ import type {
     ImageBytes,
 } from '../wasm';
 
+/** The whole of the 800x600 stub source. */
+const fullFrame = { x: 0, y: 0, width: 800, height: 600 };
+
 const settings = {
+    crop: fullFrame,
     width: 100,
     height: 100,
     format: OutputFormat.Jpeg,
@@ -147,6 +151,19 @@ describe('runCompression never returns a larger file', () => {
         expect(result.width).toBe(100);
         expect(result.height).toBe(100);
     });
+
+    it('returns a cropped image even when it encodes larger', () => {
+        const source = stubSource(1000, () => bytes(4000));
+
+        const result = runCompression(
+            source,
+            { ...settings, crop: { x: 100, y: 0, width: 600, height: 600 } },
+            'JPEG',
+        );
+
+        expect(result.keptOriginal).toBe(false);
+        expect(result.blob.size).toBe(4000);
+    });
 });
 
 describe('runFit', () => {
@@ -156,7 +173,12 @@ describe('runFit', () => {
 
         const result = runFit(
             source,
-            { width: 800, height: 600, targetBytes: 500 * 1024 },
+            {
+                crop: fullFrame,
+                width: 800,
+                height: 600,
+                targetBytes: 500 * 1024,
+            },
             'JPEG',
         );
 
@@ -177,7 +199,7 @@ describe('runFit', () => {
 
         const result = runFit(
             source,
-            { width: 800, height: 600, targetBytes: 1024 },
+            { crop: fullFrame, width: 800, height: 600, targetBytes: 1024 },
             'JPEG',
         );
 

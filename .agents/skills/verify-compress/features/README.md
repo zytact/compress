@@ -13,6 +13,7 @@ loop for that.
 | ------------------------------------------- | ------------------------------------------- | --------------- |
 | [Image intake](./image-intake.md)           | `file-drop-zone.tsx`, `wasm.ts`             | yes             |
 | [Live compression](./live-compression.md)   | `image-compressor.tsx`, `image-compare.tsx` | yes             |
+| [Frame](./frame.md)                         | `frame-editor.tsx`, `crop.ts`, `wasm/`      | yes             |
 | [Resize](./resize.md)                       | `settings-panel.tsx`                        | yes             |
 | [Format conversion](./format-conversion.md) | `compress.ts`, `compression-notice.ts`      | yes, both       |
 | [Fit to a size](./fit-to-size.md)           | `compress.ts`, `wasm/`                      | yes             |

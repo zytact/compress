@@ -244,15 +244,20 @@ export class ImageSource {
     /**
      * Encode at the highest JPEG quality that still lands under `target_bytes`.
      *
-     * Resizes once up front so a target size and a target width can be asked
-     * for together, then binary searches quality over the resized image.
+     * Crops and resizes once up front so a target size and a target width can
+     * be asked for together, then binary searches quality over the result.
      *
      * # Arguments
+     * * `crop_x`, `crop_y`, `crop_width`, `crop_height` - Region of the source to keep
      * * `width` - Target width
      * * `height` - Target height
      * * `target_bytes` - Size the output must stay under
      * * `floor_quality` - Minimum JPEG quality (default 30)
      * * `ceil_quality` - Maximum JPEG quality (default 95)
+     * @param {number} crop_x
+     * @param {number} crop_y
+     * @param {number} crop_width
+     * @param {number} crop_height
      * @param {number} width
      * @param {number} height
      * @param {number} target_bytes
@@ -260,8 +265,8 @@ export class ImageSource {
      * @param {number | null} [ceil_quality]
      * @returns {FitResult}
      */
-    fit_to_filesize(width, height, target_bytes, floor_quality, ceil_quality) {
-        const ret = wasm.imagesource_fit_to_filesize(this.__wbg_ptr, width, height, target_bytes, isLikeNone(floor_quality) ? 0xFFFFFF : floor_quality, isLikeNone(ceil_quality) ? 0xFFFFFF : ceil_quality);
+    fit_to_filesize(crop_x, crop_y, crop_width, crop_height, width, height, target_bytes, floor_quality, ceil_quality) {
+        const ret = wasm.imagesource_fit_to_filesize(this.__wbg_ptr, crop_x, crop_y, crop_width, crop_height, width, height, target_bytes, isLikeNone(floor_quality) ? 0xFFFFFF : floor_quality, isLikeNone(ceil_quality) ? 0xFFFFFF : ceil_quality);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -289,21 +294,26 @@ export class ImageSource {
         return ret >>> 0;
     }
     /**
-     * Encode at an exact size.
+     * Crop to a region of the source, then encode it at an exact size.
      *
      * # Arguments
+     * * `crop_x`, `crop_y`, `crop_width`, `crop_height` - Region of the source to keep
      * * `width` - Target width
      * * `height` - Target height
      * * `format` - Output format (Jpeg, Png, Original)
      * * `quality` - JPEG quality 1-100 (optional, default 85)
+     * @param {number} crop_x
+     * @param {number} crop_y
+     * @param {number} crop_width
+     * @param {number} crop_height
      * @param {number} width
      * @param {number} height
      * @param {OutputFormat} format
      * @param {number | null} [quality]
      * @returns {EncodedImage}
      */
-    encode(width, height, format, quality) {
-        const ret = wasm.imagesource_encode(this.__wbg_ptr, width, height, format, isLikeNone(quality) ? 0xFFFFFF : quality);
+    encode(crop_x, crop_y, crop_width, crop_height, width, height, format, quality) {
+        const ret = wasm.imagesource_encode(this.__wbg_ptr, crop_x, crop_y, crop_width, crop_height, width, height, format, isLikeNone(quality) ? 0xFFFFFF : quality);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }

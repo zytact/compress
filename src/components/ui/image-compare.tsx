@@ -1,9 +1,13 @@
 import { useCallback, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
+import type { CropRect } from '@/lib/crop';
 
 interface ImageCompareProps {
     originalUrl: string;
+    /** The part of the original the result was cut from. */
+    crop: CropRect;
+    sourceWidth: number;
     resultUrl: string | null;
     updating: boolean;
 }
@@ -21,6 +25,8 @@ const clampPercent = (value: number) => Math.min(100, Math.max(0, value));
 
 export function ImageCompare({
     originalUrl,
+    crop,
+    sourceWidth,
     resultUrl,
     updating,
 }: ImageCompareProps) {
@@ -51,12 +57,22 @@ export function ImageCompare({
             onPointerMove={handlePointerMove}
             className="relative touch-none overflow-hidden rounded-none border border-border bg-muted select-none"
         >
-            <img
-                src={originalUrl}
-                alt="Original"
-                draggable={false}
-                className="block h-auto w-full"
-            />
+            <div
+                className="relative overflow-hidden"
+                style={{ aspectRatio: `${crop.width} / ${crop.height}` }}
+            >
+                <img
+                    src={originalUrl}
+                    alt="Original"
+                    draggable={false}
+                    className="absolute h-auto max-w-none"
+                    style={{
+                        width: `${(sourceWidth / crop.width) * 100}%`,
+                        left: `${(-crop.x / crop.width) * 100}%`,
+                        top: `${(-crop.y / crop.height) * 100}%`,
+                    }}
+                />
+            </div>
 
             {resultUrl && (
                 <img

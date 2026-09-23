@@ -5,13 +5,14 @@ width interacts with quality rather than preceding it.
 
 ## Sub-features
 
-- **Scale buttons**: 100%, 75%, 50%, 25% of the original width. The active one
-  is highlighted only when the width still equals that scale exactly.
+- **Scale buttons**: 100%, 75%, 50%, 25% of the framed width, which is the
+  original width until a frame shape or zoom narrows it. The active one is
+  highlighted only when the width still equals that scale exactly.
 - **Width field**: a whole-number text input. It is a text input on purpose;
   `number-input.tsx` explains why React's numeric syncing broke it.
-- **Height follows width**: derived from the source aspect ratio, floor 1 px.
+- **Height follows width**: derived from the frame's aspect ratio, floor 1 px.
   Shown in the `SIZE` section readout as `W × H px`.
-- **Upscale clamp**: typing a width above the original clamps to the original.
+- **Upscale clamp**: typing a width above the framed width clamps to it.
 - **Fit invalidation**: changing the width clears any fit note, because the
   quality it solved for no longer describes what is on screen.
 
@@ -28,7 +29,7 @@ D=.agents/skills/verify-compress/scripts/drive.mjs && U="$COMPRESS_APP_URL"
 # 50% is index 2 in the scale group
 node $D eval "$U" 'document.querySelectorAll("[role=radiogroup][aria-label=Scale] [role=radio]")[2].click()'
 sleep 2
-node $D eval "$U" 'document.querySelector("section").innerText.replace(/\n/g," | ")'
+node $D eval "$U" '[...document.querySelectorAll("section")].find(s => s.textContent.startsWith("Size")).innerText.replace(/\n/g," | ")'
 
 # typed width, and the upscale clamp
 node $D fill "$U" 'main label input[inputmode="numeric"]' 640

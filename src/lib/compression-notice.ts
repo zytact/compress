@@ -1,5 +1,7 @@
 import { OutputFormat, formatBytes } from './wasm';
 import { FIT_QUALITY_CEIL, FIT_QUALITY_FLOOR, usesQuality } from './compress';
+import { sameCrop } from './crop';
+import type { CropRect } from './crop';
 import type { CompressionSettings } from './compress';
 import type { SourceFormat } from './wasm';
 
@@ -91,6 +93,7 @@ export function describeCompression({
 
 /** What a target-size search settled on, and the controls it settled it for. */
 export interface FitOutcome {
+    crop: CropRect;
     width: number;
     targetKb: number;
     quality: number;
@@ -106,6 +109,7 @@ export function describeFit(
 ): string | null {
     if (
         !fit ||
+        !sameCrop(fit.crop, current.crop) ||
         fit.width !== current.width ||
         fit.targetKb !== current.targetKb ||
         fit.quality !== current.quality

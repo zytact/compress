@@ -26,28 +26,30 @@ export class ImageSource {
   /**
    * Encode at the highest JPEG quality that still lands under `target_bytes`.
    *
-   * Resizes once up front so a target size and a target width can be asked
-   * for together, then binary searches quality over the resized image.
+   * Crops and resizes once up front so a target size and a target width can
+   * be asked for together, then binary searches quality over the result.
    *
    * # Arguments
+   * * `crop_x`, `crop_y`, `crop_width`, `crop_height` - Region of the source to keep
    * * `width` - Target width
    * * `height` - Target height
    * * `target_bytes` - Size the output must stay under
    * * `floor_quality` - Minimum JPEG quality (default 30)
    * * `ceil_quality` - Maximum JPEG quality (default 95)
    */
-  fit_to_filesize(width: number, height: number, target_bytes: number, floor_quality?: number | null, ceil_quality?: number | null): FitResult;
+  fit_to_filesize(crop_x: number, crop_y: number, crop_width: number, crop_height: number, width: number, height: number, target_bytes: number, floor_quality?: number | null, ceil_quality?: number | null): FitResult;
   constructor(data: Uint8Array);
   /**
-   * Encode at an exact size.
+   * Crop to a region of the source, then encode it at an exact size.
    *
    * # Arguments
+   * * `crop_x`, `crop_y`, `crop_width`, `crop_height` - Region of the source to keep
    * * `width` - Target width
    * * `height` - Target height
    * * `format` - Output format (Jpeg, Png, Original)
    * * `quality` - JPEG quality 1-100 (optional, default 85)
    */
-  encode(width: number, height: number, format: OutputFormat, quality?: number | null): EncodedImage;
+  encode(crop_x: number, crop_y: number, crop_width: number, crop_height: number, width: number, height: number, format: OutputFormat, quality?: number | null): EncodedImage;
   readonly width: number;
   readonly height: number;
 }
@@ -72,8 +74,8 @@ export interface InitOutput {
   readonly encodedimage_width: (a: number) => number;
   readonly fitresult_data: (a: number) => [number, number];
   readonly fitresult_quality: (a: number) => number;
-  readonly imagesource_encode: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
-  readonly imagesource_fit_to_filesize: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+  readonly imagesource_encode: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
+  readonly imagesource_fit_to_filesize: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number];
   readonly imagesource_height: (a: number) => number;
   readonly imagesource_new: (a: number, b: number) => [number, number, number];
   readonly imagesource_width: (a: number) => number;

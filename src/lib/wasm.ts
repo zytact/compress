@@ -1,6 +1,7 @@
 // WASM loader and wrapper
 
 import type * as Wasm from '../../public/wasm/image_compress_wasm.js';
+import type { CropRect } from './crop';
 
 type WasmModule = typeof Wasm;
 
@@ -41,6 +42,7 @@ export interface FitOutput extends EncodedImage {
 }
 
 export interface EncodeOptions {
+    crop: CropRect;
     width: number;
     height: number;
     format: OutputFormat;
@@ -48,6 +50,7 @@ export interface EncodeOptions {
 }
 
 export interface FitOptions {
+    crop: CropRect;
     width: number;
     height: number;
     targetBytes: number;
@@ -141,6 +144,10 @@ export class ImageSource implements DecodedSource {
         let result;
         try {
             result = this.handle.encode(
+                options.crop.x,
+                options.crop.y,
+                options.crop.width,
+                options.crop.height,
                 options.width,
                 options.height,
                 options.format,
@@ -160,13 +167,17 @@ export class ImageSource implements DecodedSource {
     /**
      * Encode at the highest JPEG quality that still fits under a target size.
      *
-     * Resizes to `width` x `height` first, so a target size and a target width
-     * can be asked for together.
+     * Crops and resizes to `width` x `height` first, so a target size and a
+     * target width can be asked for together.
      */
     fit(options: FitOptions): FitOutput {
         let result;
         try {
             result = this.handle.fit_to_filesize(
+                options.crop.x,
+                options.crop.y,
+                options.crop.width,
+                options.crop.height,
                 options.width,
                 options.height,
                 options.targetBytes,
