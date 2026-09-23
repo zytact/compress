@@ -1,6 +1,12 @@
 /* tslint:disable */
 /* eslint-disable */
 
+export class Crop {
+  free(): void;
+  [Symbol.dispose](): void;
+  constructor(x: number, y: number, width: number, height: number);
+}
+
 export class EncodedImage {
   private constructor();
   free(): void;
@@ -30,26 +36,26 @@ export class ImageSource {
    * be asked for together, then binary searches quality over the result.
    *
    * # Arguments
-   * * `crop_x`, `crop_y`, `crop_width`, `crop_height` - Region of the source to keep
+   * * `crop` - Region of the source to keep
    * * `width` - Target width
    * * `height` - Target height
    * * `target_bytes` - Size the output must stay under
    * * `floor_quality` - Minimum JPEG quality (default 30)
    * * `ceil_quality` - Maximum JPEG quality (default 95)
    */
-  fit_to_filesize(crop_x: number, crop_y: number, crop_width: number, crop_height: number, width: number, height: number, target_bytes: number, floor_quality?: number | null, ceil_quality?: number | null): FitResult;
+  fit_to_filesize(crop: Crop, width: number, height: number, target_bytes: number, floor_quality?: number | null, ceil_quality?: number | null): FitResult;
   constructor(data: Uint8Array);
   /**
    * Crop to a region of the source, then encode it at an exact size.
    *
    * # Arguments
-   * * `crop_x`, `crop_y`, `crop_width`, `crop_height` - Region of the source to keep
+   * * `crop` - Region of the source to keep
    * * `width` - Target width
    * * `height` - Target height
    * * `format` - Output format (Jpeg, Png, Original)
    * * `quality` - JPEG quality 1-100 (optional, default 85)
    */
-  encode(crop_x: number, crop_y: number, crop_width: number, crop_height: number, width: number, height: number, format: OutputFormat, quality?: number | null): EncodedImage;
+  encode(crop: Crop, width: number, height: number, format: OutputFormat, quality?: number | null): EncodedImage;
   readonly width: number;
   readonly height: number;
 }
@@ -66,16 +72,18 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
+  readonly __wbg_crop_free: (a: number, b: number) => void;
   readonly __wbg_encodedimage_free: (a: number, b: number) => void;
   readonly __wbg_fitresult_free: (a: number, b: number) => void;
   readonly __wbg_imagesource_free: (a: number, b: number) => void;
+  readonly crop_new: (a: number, b: number, c: number, d: number) => number;
   readonly encodedimage_data: (a: number) => [number, number];
   readonly encodedimage_height: (a: number) => number;
   readonly encodedimage_width: (a: number) => number;
   readonly fitresult_data: (a: number) => [number, number];
   readonly fitresult_quality: (a: number) => number;
-  readonly imagesource_encode: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number, number];
-  readonly imagesource_fit_to_filesize: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => [number, number, number];
+  readonly imagesource_encode: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number];
+  readonly imagesource_fit_to_filesize: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number, number];
   readonly imagesource_height: (a: number) => number;
   readonly imagesource_new: (a: number, b: number) => [number, number, number];
   readonly imagesource_width: (a: number) => number;

@@ -1,12 +1,14 @@
 import { useEffect, useRef } from 'react';
 import { Slider } from './slider';
 import type {
+    Dispatch,
     KeyboardEvent as ReactKeyboardEvent,
     PointerEvent as ReactPointerEvent,
+    SetStateAction,
 } from 'react';
 
 import type { CropRect, Framing } from '@/lib/crop';
-import { MAX_ZOOM, frameCrop } from '@/lib/crop';
+import { MAX_ZOOM, clampZoom, frameCrop } from '@/lib/crop';
 
 interface FrameEditorProps {
     imageUrl: string;
@@ -14,7 +16,7 @@ interface FrameEditorProps {
     sourceHeight: number;
     framing: Framing;
     crop: CropRect;
-    onFramingChange: (framing: Framing) => void;
+    onFramingChange: Dispatch<SetStateAction<Framing>>;
     /** Output size, printed above the frame. */
     outputLabel: string;
 }
@@ -26,8 +28,6 @@ const FRAME_FILL = 0.88;
 const KEY_PAN = 0.05;
 const KEY_ZOOM = 1.1;
 const WHEEL_ZOOM = 0.0015;
-
-const clampZoom = (zoom: number) => Math.min(MAX_ZOOM, Math.max(1, zoom));
 
 /**
  * The output frame over the source. The frame stays put and the picture moves
@@ -82,24 +82,26 @@ export function FrameEditor({
         onFramingChange({ ...framing, zoom: clampZoom(zoom) });
 
     // React registers wheel listeners as passive, and the page must not scroll
-    // while the wheel zooms
+    // while the wheel zooms. Wheel events can outpace renders, so each one
+    // builds on the latest zoom rather than the one this render saw
     useEffect(() => {
         const stage = stageRef.current;
         if (!stage) return;
         const onWheel = (event: WheelEvent) => {
             event.preventDefault();
-            onFramingChange({
-                ...framing,
+            onFramingChange((current) => ({
+                ...current,
                 zoom: clampZoom(
-                    framing.zoom * Math.exp(-event.deltaY * WHEEL_ZOOM),
+                    current.zoom * Math.exp(-event.deltaY * WHEEL_ZOOM),
                 ),
-            });
+            }));
         };
         stage.addEventListener('wheel', onWheel, { passive: false });
         return () => stage.removeEventListener('wheel', onWheel);
-    }, [framing, onFramingChange]);
+    }, [onFramingChange]);
 
     const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+        if (event.button !== 0) return;
         event.currentTarget.setPointerCapture(event.pointerId);
         const stageWidth = event.currentTarget.getBoundingClientRect().width;
         panRef.current = {

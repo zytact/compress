@@ -98,12 +98,26 @@ pub struct ImageSource {
 }
 
 /// A rectangle of the source in source pixels, which is all that gets encoded.
+#[wasm_bindgen]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-struct Crop {
+pub struct Crop {
     x: u32,
     y: u32,
     width: u32,
     height: u32,
+}
+
+#[wasm_bindgen]
+impl Crop {
+    #[wasm_bindgen(constructor)]
+    pub fn new(x: u32, y: u32, width: u32, height: u32) -> Crop {
+        Crop {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
 }
 
 impl Crop {
@@ -165,30 +179,20 @@ impl ImageSource {
     /// Crop to a region of the source, then encode it at an exact size.
     ///
     /// # Arguments
-    /// * `crop_x`, `crop_y`, `crop_width`, `crop_height` - Region of the source to keep
+    /// * `crop` - Region of the source to keep
     /// * `width` - Target width
     /// * `height` - Target height
     /// * `format` - Output format (Jpeg, Png, Original)
     /// * `quality` - JPEG quality 1-100 (optional, default 85)
-    #[allow(clippy::too_many_arguments)]
     pub fn encode(
         &mut self,
-        crop_x: u32,
-        crop_y: u32,
-        crop_width: u32,
-        crop_height: u32,
+        crop: Crop,
         width: u32,
         height: u32,
         format: OutputFormat,
         quality: Option<u8>,
     ) -> Result<EncodedImage, JsValue> {
         let output = self.resolve_format(format, quality.unwrap_or(DEFAULT_QUALITY));
-        let crop = Crop {
-            x: crop_x,
-            y: crop_y,
-            width: crop_width,
-            height: crop_height,
-        };
         let data = self.prepare(crop, width, height)?.encode(output)?;
 
         Ok(EncodedImage {
@@ -204,19 +208,15 @@ impl ImageSource {
     /// be asked for together, then binary searches quality over the result.
     ///
     /// # Arguments
-    /// * `crop_x`, `crop_y`, `crop_width`, `crop_height` - Region of the source to keep
+    /// * `crop` - Region of the source to keep
     /// * `width` - Target width
     /// * `height` - Target height
     /// * `target_bytes` - Size the output must stay under
     /// * `floor_quality` - Minimum JPEG quality (default 30)
     /// * `ceil_quality` - Maximum JPEG quality (default 95)
-    #[allow(clippy::too_many_arguments)]
     pub fn fit_to_filesize(
         &mut self,
-        crop_x: u32,
-        crop_y: u32,
-        crop_width: u32,
-        crop_height: u32,
+        crop: Crop,
         width: u32,
         height: u32,
         target_bytes: u32,
@@ -225,12 +225,6 @@ impl ImageSource {
     ) -> Result<FitResult, JsValue> {
         let floor = floor_quality.unwrap_or(30).clamp(1, 100);
         let ceil = ceil_quality.unwrap_or(95).clamp(floor, 100);
-        let crop = Crop {
-            x: crop_x,
-            y: crop_y,
-            width: crop_width,
-            height: crop_height,
-        };
         let prepared = self.prepare(crop, width, height)?;
 
         let mut under: Option<(Vec<u8>, u8)> = None;
@@ -364,14 +358,12 @@ impl Prepared {
 
 /// Cuts `crop` out of the source and scales it to exactly `width` x `height`.
 fn render(source: &DynamicImage, crop: Crop, width: u32, height: u32) -> DynamicImage {
-    let region = if crop.covers(source) {
-        source.clone()
-    } else {
-        source.crop_imm(crop.x, crop.y, crop.width, crop.height)
-    };
+    let cropped =
+        (!crop.covers(source)).then(|| source.crop_imm(crop.x, crop.y, crop.width, crop.height));
+    let region = cropped.as_ref().unwrap_or(source);
 
     if region.width() == width && region.height() == height {
-        region
+        cropped.unwrap_or_else(|| source.clone())
     } else {
         region.resize_exact(width, height, FilterType::Lanczos3)
     }

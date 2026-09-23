@@ -19,6 +19,9 @@ export interface Framing {
 
 export const MAX_ZOOM = 4;
 
+export const clampZoom = (zoom: number) =>
+    Math.min(MAX_ZOOM, Math.max(1, zoom));
+
 export const centeredFraming = (
     aspect: number | null,
     sourceWidth: number,
@@ -42,7 +45,7 @@ export function frameCrop(
 
     const aspect = framing.aspect ?? sourceWidth / sourceHeight;
     const fullWidth = Math.min(sourceWidth, sourceHeight * aspect);
-    const zoom = Math.min(MAX_ZOOM, Math.max(1, framing.zoom));
+    const zoom = clampZoom(framing.zoom);
     const side = (full: number, source: number) =>
         Math.min(source, Math.max(1, Math.round(full / zoom)));
 

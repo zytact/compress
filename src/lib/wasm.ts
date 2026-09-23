@@ -115,6 +115,7 @@ export interface DecodedSource {
  */
 export class ImageSource implements DecodedSource {
     private constructor(
+        private readonly wasm: WasmModule,
         private readonly handle: Wasm.ImageSource,
         readonly bytes: ImageBytes,
     ) {}
@@ -122,7 +123,7 @@ export class ImageSource implements DecodedSource {
     static async create(bytes: ImageBytes): Promise<ImageSource> {
         const wasm = await initWasm();
         try {
-            return new ImageSource(new wasm.ImageSource(bytes), bytes);
+            return new ImageSource(wasm, new wasm.ImageSource(bytes), bytes);
         } catch (error) {
             throw new Error(`Failed to decode image: ${describe(error)}`);
         }
@@ -144,10 +145,7 @@ export class ImageSource implements DecodedSource {
         let result;
         try {
             result = this.handle.encode(
-                options.crop.x,
-                options.crop.y,
-                options.crop.width,
-                options.crop.height,
+                this.toWasmCrop(options.crop),
                 options.width,
                 options.height,
                 options.format,
@@ -174,10 +172,7 @@ export class ImageSource implements DecodedSource {
         let result;
         try {
             result = this.handle.fit_to_filesize(
-                options.crop.x,
-                options.crop.y,
-                options.crop.width,
-                options.crop.height,
+                this.toWasmCrop(options.crop),
                 options.width,
                 options.height,
                 options.targetBytes,
@@ -199,6 +194,11 @@ export class ImageSource implements DecodedSource {
 
     free(): void {
         this.handle.free();
+    }
+
+    /** Passed by value, so WASM takes ownership and frees it. */
+    private toWasmCrop({ x, y, width, height }: CropRect): Wasm.Crop {
+        return new this.wasm.Crop(x, y, width, height);
     }
 }
 

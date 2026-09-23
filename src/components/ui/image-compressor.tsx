@@ -13,13 +13,14 @@ import { ByteBar } from './byte-bar';
 import { Button } from './button';
 import type { ImageInfo } from '@/lib/wasm';
 import type { CompressionSettings } from '@/lib/compress';
+import type { SetStateAction } from 'react';
 import type { Framing } from '@/lib/crop';
 import type { FitOutcome } from '@/lib/compression-notice';
 import type { SourceToken } from '@/lib/compress-client';
 import { areSettingsCompressible, sameSettings } from '@/lib/compress';
 import { describeCompression, describeFit } from '@/lib/compression-notice';
 import { compress, fitToSize, loadSource } from '@/lib/compress-client';
-import { centeredFraming, frameCrop } from '@/lib/crop';
+import { centeredFraming, frameCrop, sameCrop } from '@/lib/crop';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { cn } from '@/lib/utils';
 import {
@@ -285,7 +286,7 @@ export default function ImageCompressor() {
         }
     };
 
-    const handleFramingChange = useCallback((next: Framing) => {
+    const handleFramingChange = useCallback((next: SetStateAction<Framing>) => {
         invalidateFit();
         setFraming(next);
     }, []);
@@ -369,7 +370,13 @@ export default function ImageCompressor() {
                                 originalUrl={originalPreview}
                                 crop={crop}
                                 sourceWidth={originalInfo.width}
-                                resultUrl={compressed?.previewUrl ?? null}
+                                resultUrl={
+                                    // A result cut for another crop would be
+                                    // stretched over this one
+                                    applied && sameCrop(applied.crop, crop)
+                                        ? (compressed?.previewUrl ?? null)
+                                        : null
+                                }
                                 updating={
                                     (compressing || !settled) && !upToDate
                                 }
@@ -425,6 +432,7 @@ export default function ImageCompressor() {
                             setView('frame');
                         }}
                         frameWidth={crop.width}
+                        frameHeight={crop.height}
                         originalFormat={originalFormat}
                         width={outputWidth}
                         height={height}
