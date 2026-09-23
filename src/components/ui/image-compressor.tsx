@@ -5,17 +5,22 @@ import { Download } from 'lucide-react';
 
 import { FileDropzone } from './file-drop-zone';
 import { SettingsPanel } from './settings-panel';
+import { FrameEditor } from './frame-editor';
+import { Segmented } from './segmented';
 import { ErrorBanner } from './error-banner';
 import { ImageCompare } from './image-compare';
 import { ByteBar } from './byte-bar';
 import { Button } from './button';
 import type { ImageInfo } from '@/lib/wasm';
 import type { CompressionSettings } from '@/lib/compress';
+import type { SetStateAction } from 'react';
+import type { Framing } from '@/lib/crop';
 import type { FitOutcome } from '@/lib/compression-notice';
 import type { SourceToken } from '@/lib/compress-client';
 import { areSettingsCompressible, sameSettings } from '@/lib/compress';
 import { describeCompression, describeFit } from '@/lib/compression-notice';
 import { compress, fitToSize, loadSource } from '@/lib/compress-client';
+import { centeredFraming, frameCrop, sameCrop } from '@/lib/crop';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { cn } from '@/lib/utils';
 import {
@@ -52,6 +57,11 @@ export default function ImageCompressor() {
     const [compressing, setCompressing] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    const [framing, setFraming] = useState<Framing>(() =>
+        centeredFraming(null, 0, 0),
+    );
+    const [view, setView] = useState<'compare' | 'frame'>('compare');
+    // The width asked for; the output never exceeds the framed width
     const [width, setWidth] = useState(0);
     const [outputFormat, setOutputFormat] = useState<OutputFormat>(
         OutputFormat.Original,
@@ -123,6 +133,8 @@ export default function ImageCompressor() {
                 size_bytes: file.size,
                 format,
             });
+            setFraming(centeredFraming(null, dims.width, dims.height));
+            setView('compare');
             setWidth(dims.width);
             setSourceToken(token);
         } catch (err) {
@@ -133,19 +145,38 @@ export default function ImageCompressor() {
         }
     }, []);
 
-    const fitNote = describeFit(fit, { width, targetKb, quality });
+    // Memoized so an unchanged crop keeps `settings` stable and lets it settle
+    const crop = useMemo(
+        () =>
+            frameCrop(
+                framing,
+                originalInfo?.width ?? 0,
+                originalInfo?.height ?? 0,
+            ),
+        [framing, originalInfo],
+    );
+    const outputWidth = Math.min(width, crop.width);
+    const height =
+        crop.width > 0
+            ? Math.max(1, Math.round((outputWidth * crop.height) / crop.width))
+            : 0;
 
-    const aspectRatio =
-        originalInfo && originalInfo.height > 0
-            ? originalInfo.width / originalInfo.height
-            : null;
-    const height = aspectRatio
-        ? Math.max(1, Math.round(width / aspectRatio))
-        : 0;
+    const fitNote = describeFit(fit, {
+        crop,
+        width: outputWidth,
+        targetKb,
+        quality,
+    });
 
     const settings = useMemo<CompressionSettings>(
-        () => ({ width, height, format: outputFormat, quality }),
-        [width, height, outputFormat, quality],
+        () => ({
+            crop,
+            width: outputWidth,
+            height,
+            format: outputFormat,
+            quality,
+        }),
+        [crop, outputWidth, height, outputFormat, quality],
     );
     const debouncedSettings = useDebouncedValue(settings, LIVE_UPDATE_DELAY_MS);
     // Editing is still in flight while the debounced copy lags the live one
@@ -219,7 +250,7 @@ export default function ImageCompressor() {
     }, [compressed]);
 
     const handleFit = async () => {
-        if (sourceToken === null || width <= 0) return;
+        if (sourceToken === null || outputWidth <= 0) return;
 
         invalidateFit();
         const attempt = fitAttemptRef.current;
@@ -228,7 +259,8 @@ export default function ImageCompressor() {
         setError(null);
         try {
             const result = await fitToSize(sourceToken, {
-                width,
+                crop,
+                width: outputWidth,
                 height,
                 targetBytes: targetKb * 1024,
             });
@@ -243,7 +275,7 @@ export default function ImageCompressor() {
             });
             setApplied({ ...settings, quality: solved });
             setQuality(solved);
-            setFit({ width, targetKb, quality: solved });
+            setFit({ crop, width: outputWidth, targetKb, quality: solved });
         } catch (err) {
             if (fitAttemptRef.current !== attempt) return;
             setError(
@@ -253,6 +285,11 @@ export default function ImageCompressor() {
             if (fitAttemptRef.current === attempt) setFitting(false);
         }
     };
+
+    const handleFramingChange = useCallback((next: SetStateAction<Framing>) => {
+        invalidateFit();
+        setFraming(next);
+    }, []);
 
     const handleDownload = () => {
         if (!compressed || !selectedFile) return;
@@ -316,11 +353,46 @@ export default function ImageCompressor() {
 
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
                 <div className="space-y-5">
-                    <ImageCompare
-                        originalUrl={originalPreview}
-                        resultUrl={compressed?.previewUrl ?? null}
-                        updating={(compressing || !settled) && !upToDate}
-                    />
+                    <div className="space-y-3">
+                        <div className="w-56">
+                            <Segmented
+                                label="Preview"
+                                value={view}
+                                options={[
+                                    { value: 'compare', label: 'Compare' },
+                                    { value: 'frame', label: 'Frame' },
+                                ]}
+                                onChange={setView}
+                            />
+                        </div>
+                        {view === 'compare' ? (
+                            <ImageCompare
+                                originalUrl={originalPreview}
+                                crop={crop}
+                                sourceWidth={originalInfo.width}
+                                resultUrl={
+                                    // A result cut for another crop would be
+                                    // stretched over this one
+                                    applied && sameCrop(applied.crop, crop)
+                                        ? (compressed?.previewUrl ?? null)
+                                        : null
+                                }
+                                updating={
+                                    (compressing || !settled) && !upToDate
+                                }
+                            />
+                        ) : (
+                            <FrameEditor
+                                imageUrl={originalPreview}
+                                sourceWidth={originalInfo.width}
+                                sourceHeight={originalInfo.height}
+                                framing={framing}
+                                crop={crop}
+                                onFramingChange={handleFramingChange}
+                                outputLabel={`${outputWidth} × ${height}`}
+                            />
+                        )}
+                    </div>
 
                     <ByteBar
                         originalSize={originalInfo.size_bytes}
@@ -348,9 +420,21 @@ export default function ImageCompressor() {
 
                 <div className="space-y-4">
                     <SettingsPanel
-                        originalWidth={originalInfo.width}
+                        aspect={framing.aspect}
+                        onAspectChange={(aspect) => {
+                            handleFramingChange(
+                                centeredFraming(
+                                    aspect,
+                                    originalInfo.width,
+                                    originalInfo.height,
+                                ),
+                            );
+                            setView('frame');
+                        }}
+                        frameWidth={crop.width}
+                        frameHeight={crop.height}
                         originalFormat={originalFormat}
-                        width={width}
+                        width={outputWidth}
                         height={height}
                         onWidthChange={(next) => {
                             invalidateFit();

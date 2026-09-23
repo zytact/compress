@@ -4,8 +4,12 @@ A fast, privacy-focused image compression and resizing tool that runs entirely i
 
 ## Features
 
-Size, format and quality are all live at once, so resizing and re-encoding
-happen in one pass rather than as separate modes.
+Crop, size, format and quality are all live at once, so cropping, resizing and
+re-encoding happen in one pass rather than as separate modes.
+
+Pick a frame shape (1:1, 4:5, 16:9 and so on), then drag and zoom the picture
+under the frame to choose what to keep. The frame is the output, so there is no
+separate crop step before compressing.
 
 Name a target in KB and the app searches for the JPEG quality that lands just
 under it, at whatever width you picked, then hands the slider back to you.
@@ -109,9 +113,9 @@ compress/
 2. **Format Detection**: Browser and WASM detect image format and dimensions
 3. **HEIC Handling**: For HEIC files, browser-native APIs convert to JPEG first
 4. **Processing**:
-    - **By Dimensions**: Resizes to exact W×H with specified quality
+    - **By Dimensions**: Crops to the frame, then resizes to exact W×H with specified quality
     - **By File Size**: Uses binary search to find quality level that hits target size
-5. **Preview**: Drag a comparison slider across the original and the result
+5. **Preview**: Drag a comparison slider across the original and the result, or switch to Frame to reposition the crop
 6. **Download**: Save the result as `<name>-compressed.<ext>`
 
 ## WASM Module
@@ -119,8 +123,8 @@ compress/
 The core image processing is written in Rust and compiled to WebAssembly using `wasm-bindgen`:
 
 - `ImageSource`: Decodes an image once and re-encodes it across passes
-- `ImageSource.encode()`: Encode at exact dimensions with quality control
-- `ImageSource.fit_to_filesize()`: Binary search for the quality that hits a target file size
+- `ImageSource.encode()`: Crop to a region, then encode at exact dimensions with quality control
+- `ImageSource.fit_to_filesize()`: Crop and resize, then binary search for the quality that hits a target file size
 - Format detection for JPEG/PNG
 - Lanczos3 resampling for high-quality resizing
 

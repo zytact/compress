@@ -3,6 +3,7 @@ import { describeCompression, describeFit } from '../compression-notice';
 import { OutputFormat } from '../wasm';
 
 const settings = {
+    crop: { x: 0, y: 0, width: 100, height: 100 },
     width: 100,
     height: 100,
     format: OutputFormat.Jpeg,
@@ -104,7 +105,12 @@ describe('describeCompression', () => {
 });
 
 describe('describeFit', () => {
-    const solved = { width: 1200, targetKb: 120, quality: 62 };
+    const solved = {
+        crop: { x: 0, y: 0, width: 1600, height: 1200 },
+        width: 1200,
+        targetKb: 120,
+        quality: 62,
+    };
 
     it('explains the quality the search settled on', () => {
         expect(describeFit(solved, solved)).toBe(
@@ -114,6 +120,12 @@ describe('describeFit', () => {
 
     it('goes quiet once any control it was solved for has moved', () => {
         expect(describeFit(solved, { ...solved, width: 2400 })).toBeNull();
+        expect(
+            describeFit(solved, {
+                ...solved,
+                crop: { ...solved.crop, x: 10 },
+            }),
+        ).toBeNull();
         expect(describeFit(solved, { ...solved, targetKb: 500 })).toBeNull();
         expect(describeFit(solved, { ...solved, quality: 63 })).toBeNull();
     });

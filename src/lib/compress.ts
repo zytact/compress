@@ -1,7 +1,11 @@
 import { OutputFormat, getMimeType, uint8ArrayToBlob } from './wasm';
+import { coversSource, sameCrop } from './crop';
+import type { CropRect } from './crop';
 import type { DecodedSource, EncodedImage, SourceFormat } from './wasm';
 
 export interface CompressionSettings {
+    /** Region of the source to keep, scaled to `width` x `height`. */
+    crop: CropRect;
     width: number;
     height: number;
     format: OutputFormat;
@@ -9,6 +13,7 @@ export interface CompressionSettings {
 }
 
 export interface FitRequest {
+    crop: CropRect;
     width: number;
     height: number;
     targetBytes: number;
@@ -55,7 +60,12 @@ export function usesQuality(
 export function areSettingsCompressible(
     settings: CompressionSettings,
 ): boolean {
-    return settings.width > 0 && settings.height > 0;
+    return (
+        settings.width > 0 &&
+        settings.height > 0 &&
+        settings.crop.width > 0 &&
+        settings.crop.height > 0
+    );
 }
 
 /** Whether two settings would produce the same file, so one result covers both. */
@@ -64,6 +74,7 @@ export function sameSettings(
     b: CompressionSettings,
 ): boolean {
     return (
+        sameCrop(a.crop, b.crop) &&
         a.width === b.width &&
         a.height === b.height &&
         a.format === b.format &&
@@ -77,15 +88,20 @@ export function sameSettings(
  *
  * The output is therefore never larger than the input. That overrides a
  * requested format when honoring it would cost bytes; `keptOriginal` tells the
- * UI to say so.
+ * UI to say so. A cropped image always wins, since the source is not the
+ * picture the user framed.
  */
 function keepSmaller(
     source: DecodedSource,
     encoded: EncodedImage,
+    crop: CropRect,
     format: OutputFormat,
     originalFormat: SourceFormat | null,
 ): CompressionResult {
-    if (encoded.data.length < source.byteLength) {
+    if (
+        encoded.data.length < source.byteLength ||
+        !coversSource(crop, source.width, source.height)
+    ) {
         return {
             blob: uint8ArrayToBlob(encoded.data, getMimeType(format)),
             format,
@@ -122,13 +138,14 @@ export function runCompression(
 ): CompressionResult {
     const format = resolveOutputFormat(settings.format, originalFormat);
     const encoded = source.encode({
+        crop: settings.crop,
         width: settings.width,
         height: settings.height,
         format,
         quality: settings.quality,
     });
 
-    return keepSmaller(source, encoded, format, originalFormat);
+    return keepSmaller(source, encoded, settings.crop, format, originalFormat);
 }
 
 /**
@@ -147,7 +164,13 @@ export function runFit(
     });
 
     return {
-        ...keepSmaller(source, output, OutputFormat.Jpeg, originalFormat),
+        ...keepSmaller(
+            source,
+            output,
+            request.crop,
+            OutputFormat.Jpeg,
+            originalFormat,
+        ),
         quality: output.quality,
     };
 }

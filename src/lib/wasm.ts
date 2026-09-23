@@ -1,6 +1,7 @@
 // WASM loader and wrapper
 
 import type * as Wasm from '../../public/wasm/image_compress_wasm.js';
+import type { CropRect } from './crop';
 
 type WasmModule = typeof Wasm;
 
@@ -41,6 +42,7 @@ export interface FitOutput extends EncodedImage {
 }
 
 export interface EncodeOptions {
+    crop: CropRect;
     width: number;
     height: number;
     format: OutputFormat;
@@ -48,6 +50,7 @@ export interface EncodeOptions {
 }
 
 export interface FitOptions {
+    crop: CropRect;
     width: number;
     height: number;
     targetBytes: number;
@@ -112,6 +115,7 @@ export interface DecodedSource {
  */
 export class ImageSource implements DecodedSource {
     private constructor(
+        private readonly wasm: WasmModule,
         private readonly handle: Wasm.ImageSource,
         readonly bytes: ImageBytes,
     ) {}
@@ -119,7 +123,7 @@ export class ImageSource implements DecodedSource {
     static async create(bytes: ImageBytes): Promise<ImageSource> {
         const wasm = await initWasm();
         try {
-            return new ImageSource(new wasm.ImageSource(bytes), bytes);
+            return new ImageSource(wasm, new wasm.ImageSource(bytes), bytes);
         } catch (error) {
             throw new Error(`Failed to decode image: ${describe(error)}`);
         }
@@ -141,6 +145,7 @@ export class ImageSource implements DecodedSource {
         let result;
         try {
             result = this.handle.encode(
+                this.toWasmCrop(options.crop),
                 options.width,
                 options.height,
                 options.format,
@@ -160,13 +165,14 @@ export class ImageSource implements DecodedSource {
     /**
      * Encode at the highest JPEG quality that still fits under a target size.
      *
-     * Resizes to `width` x `height` first, so a target size and a target width
-     * can be asked for together.
+     * Crops and resizes to `width` x `height` first, so a target size and a
+     * target width can be asked for together.
      */
     fit(options: FitOptions): FitOutput {
         let result;
         try {
             result = this.handle.fit_to_filesize(
+                this.toWasmCrop(options.crop),
                 options.width,
                 options.height,
                 options.targetBytes,
@@ -188,6 +194,11 @@ export class ImageSource implements DecodedSource {
 
     free(): void {
         this.handle.free();
+    }
+
+    /** Passed by value, so WASM takes ownership and frees it. */
+    private toWasmCrop({ x, y, width, height }: CropRect): Wasm.Crop {
+        return new this.wasm.Crop(x, y, width, height);
     }
 }
 

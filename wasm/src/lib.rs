@@ -97,8 +97,57 @@ pub struct ImageSource {
     prepared: Option<Prepared>,
 }
 
-/// The source at one output size, kept until a different size is asked for.
+/// A rectangle of the source in source pixels, which is all that gets encoded.
+#[wasm_bindgen]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Crop {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+#[wasm_bindgen]
+impl Crop {
+    #[wasm_bindgen(constructor)]
+    pub fn new(x: u32, y: u32, width: u32, height: u32) -> Crop {
+        Crop {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+}
+
+impl Crop {
+    fn covers(&self, image: &DynamicImage) -> bool {
+        *self
+            == Crop {
+                x: 0,
+                y: 0,
+                width: image.width(),
+                height: image.height(),
+            }
+    }
+
+    fn fits_in(&self, image: &DynamicImage) -> bool {
+        self.width > 0
+            && self.height > 0
+            && self
+                .x
+                .checked_add(self.width)
+                .is_some_and(|r| r <= image.width())
+            && self
+                .y
+                .checked_add(self.height)
+                .is_some_and(|b| b <= image.height())
+    }
+}
+
+/// The source at one crop and output size, kept until a different one is asked for.
 struct Prepared {
+    crop: Crop,
     width: u32,
     height: u32,
     image: Rc<DynamicImage>,
@@ -127,22 +176,24 @@ impl ImageSource {
         self.decoded.height()
     }
 
-    /// Encode at an exact size.
+    /// Crop to a region of the source, then encode it at an exact size.
     ///
     /// # Arguments
+    /// * `crop` - Region of the source to keep
     /// * `width` - Target width
     /// * `height` - Target height
     /// * `format` - Output format (Jpeg, Png, Original)
     /// * `quality` - JPEG quality 1-100 (optional, default 85)
     pub fn encode(
         &mut self,
+        crop: Crop,
         width: u32,
         height: u32,
         format: OutputFormat,
         quality: Option<u8>,
     ) -> Result<EncodedImage, JsValue> {
         let output = self.resolve_format(format, quality.unwrap_or(DEFAULT_QUALITY));
-        let data = self.prepare(width, height)?.encode(output)?;
+        let data = self.prepare(crop, width, height)?.encode(output)?;
 
         Ok(EncodedImage {
             data,
@@ -153,10 +204,11 @@ impl ImageSource {
 
     /// Encode at the highest JPEG quality that still lands under `target_bytes`.
     ///
-    /// Resizes once up front so a target size and a target width can be asked
-    /// for together, then binary searches quality over the resized image.
+    /// Crops and resizes once up front so a target size and a target width can
+    /// be asked for together, then binary searches quality over the result.
     ///
     /// # Arguments
+    /// * `crop` - Region of the source to keep
     /// * `width` - Target width
     /// * `height` - Target height
     /// * `target_bytes` - Size the output must stay under
@@ -164,6 +216,7 @@ impl ImageSource {
     /// * `ceil_quality` - Maximum JPEG quality (default 95)
     pub fn fit_to_filesize(
         &mut self,
+        crop: Crop,
         width: u32,
         height: u32,
         target_bytes: u32,
@@ -172,7 +225,7 @@ impl ImageSource {
     ) -> Result<FitResult, JsValue> {
         let floor = floor_quality.unwrap_or(30).clamp(1, 100);
         let ceil = ceil_quality.unwrap_or(95).clamp(floor, 100);
-        let prepared = self.prepare(width, height)?;
+        let prepared = self.prepare(crop, width, height)?;
 
         let mut under: Option<(Vec<u8>, u8)> = None;
         let mut smallest: Option<(Vec<u8>, u8)> = None;
@@ -212,25 +265,29 @@ impl ImageSource {
 }
 
 impl ImageSource {
-    /// Resizes to `width` x `height` unless that size is already cached.
-    fn prepare(&mut self, width: u32, height: u32) -> Result<&mut Prepared, JsValue> {
+    /// Crops and resizes to `width` x `height` unless that is already cached.
+    fn prepare(&mut self, crop: Crop, width: u32, height: u32) -> Result<&mut Prepared, JsValue> {
         if width == 0 || height == 0 {
             return Err(JsValue::from_str(
                 "Target dimensions must be greater than 0",
             ));
         }
+        if !crop.fits_in(&self.decoded) {
+            return Err(JsValue::from_str("Crop must lie inside the image"));
+        }
 
-        let cached = matches!(&self.prepared, Some(p) if p.width == width && p.height == height);
+        let cached = matches!(&self.prepared, Some(p) if p.crop == crop && p.width == width && p.height == height);
         if !cached {
-            let image = if width == self.decoded.width() && height == self.decoded.height() {
+            let image = if crop.covers(&self.decoded)
+                && width == self.decoded.width()
+                && height == self.decoded.height()
+            {
                 Rc::clone(&self.decoded)
             } else {
-                Rc::new(
-                    self.decoded
-                        .resize_exact(width, height, FilterType::Lanczos3),
-                )
+                Rc::new(render(&self.decoded, crop, width, height))
             };
             self.prepared = Some(Prepared {
+                crop,
                 width,
                 height,
                 image,
@@ -299,6 +356,19 @@ impl Prepared {
     }
 }
 
+/// Cuts `crop` out of the source and scales it to exactly `width` x `height`.
+fn render(source: &DynamicImage, crop: Crop, width: u32, height: u32) -> DynamicImage {
+    let cropped =
+        (!crop.covers(source)).then(|| source.crop_imm(crop.x, crop.y, crop.width, crop.height));
+    let region = cropped.as_ref().unwrap_or(source);
+
+    if region.width() == width && region.height() == height {
+        cropped.unwrap_or_else(|| source.clone())
+    } else {
+        region.resize_exact(width, height, FilterType::Lanczos3)
+    }
+}
+
 /// Decodes an image and bakes its EXIF orientation into the pixels, so the
 /// dimensions here match the upright ones the browser reports to the caller.
 fn load_image(data: &[u8]) -> Result<DynamicImage, JsValue> {
@@ -340,5 +410,44 @@ mod tests {
             bottom[2] > 200 && bottom[0] < 60,
             "bottom half should be blue: {bottom:?}"
         );
+    }
+
+    #[test]
+    fn render_keeps_only_the_cropped_region() {
+        // Left half red, right half blue
+        let source = DynamicImage::ImageRgb8(RgbImage::from_fn(40, 20, |x, _| {
+            if x < 20 {
+                image::Rgb([255, 0, 0])
+            } else {
+                image::Rgb([0, 0, 255])
+            }
+        }));
+        let right = Crop {
+            x: 20,
+            y: 0,
+            width: 20,
+            height: 20,
+        };
+
+        let out = render(&source, right, 10, 10).to_rgb8();
+
+        assert_eq!(out.dimensions(), (10, 10));
+        assert!(out.pixels().all(|p| p.0[2] > 200 && p.0[0] < 60));
+    }
+
+    #[test]
+    fn crop_must_fit_inside_the_source() {
+        let source = DynamicImage::new_rgb8(40, 20);
+        let crop = |x, y, width, height| Crop {
+            x,
+            y,
+            width,
+            height,
+        };
+
+        assert!(crop(0, 0, 40, 20).fits_in(&source));
+        assert!(!crop(1, 0, 40, 20).fits_in(&source));
+        assert!(!crop(0, 0, 0, 20).fits_in(&source));
+        assert!(!crop(u32::MAX, 0, 2, 20).fits_in(&source));
     }
 }

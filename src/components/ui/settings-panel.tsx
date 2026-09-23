@@ -9,7 +9,11 @@ import { OutputFormat } from '@/lib/wasm';
 import { usesQuality } from '@/lib/compress';
 
 interface SettingsPanelProps {
-    originalWidth: number;
+    aspect: number | null;
+    onAspectChange: (aspect: number | null) => void;
+    /** The framed part of the source; the output width never exceeds it. */
+    frameWidth: number;
+    frameHeight: number;
     originalFormat: SourceFormat | null;
     width: number;
     height: number;
@@ -25,13 +29,25 @@ interface SettingsPanelProps {
     fitNote: string | null;
 }
 
+const FRAME_SHAPES = [
+    { label: 'Original', aspect: null },
+    { label: '1:1', aspect: 1 },
+    { label: '4:5', aspect: 4 / 5 },
+    { label: '3:2', aspect: 3 / 2 },
+    { label: '16:9', aspect: 16 / 9 },
+    { label: '9:16', aspect: 9 / 16 },
+] as const;
+
 const SCALES = [1, 0.75, 0.5, 0.25];
 
-const scaledWidth = (originalWidth: number, scale: number) =>
-    Math.max(1, Math.round(originalWidth * scale));
+const scaledWidth = (frameWidth: number, scale: number) =>
+    Math.max(1, Math.round(frameWidth * scale));
 
 export function SettingsPanel({
-    originalWidth,
+    aspect,
+    onAspectChange,
+    frameWidth,
+    frameHeight,
     originalFormat,
     width,
     height,
@@ -46,13 +62,37 @@ export function SettingsPanel({
     fitting,
     fitNote,
 }: SettingsPanelProps) {
+    const activeShape = FRAME_SHAPES.findIndex(
+        (shape) => shape.aspect === aspect,
+    );
     const activeScale =
-        SCALES.find((scale) => scaledWidth(originalWidth, scale) === width) ??
+        SCALES.find((scale) => scaledWidth(frameWidth, scale) === width) ??
         null;
     const jpegOut = usesQuality(format, originalFormat);
 
     return (
         <div className="divide-y divide-border rounded-none border border-border bg-card">
+            <Section
+                title="Frame"
+                readout={`${frameWidth} × ${frameHeight} px`}
+            >
+                <Segmented
+                    label="Frame shape"
+                    value={activeShape}
+                    options={FRAME_SHAPES.map(({ label }, index) => ({
+                        value: index,
+                        label,
+                    }))}
+                    onChange={(index) =>
+                        onAspectChange(FRAME_SHAPES[index].aspect)
+                    }
+                />
+                <p className="text-xs text-muted-foreground">
+                    The part of the source you keep. Drag and zoom the picture
+                    under the frame to pick it.
+                </p>
+            </Section>
+
             <Section title="Size" readout={`${width} × ${height} px`}>
                 <Segmented
                     label="Scale"
@@ -62,7 +102,7 @@ export function SettingsPanel({
                         label: `${scale * 100}%`,
                     }))}
                     onChange={(scale) =>
-                        onWidthChange(scaledWidth(originalWidth, scale))
+                        onWidthChange(scaledWidth(frameWidth, scale))
                     }
                 />
                 <label className="flex items-center gap-3">
@@ -72,7 +112,7 @@ export function SettingsPanel({
                     <NumberInput
                         value={width}
                         onValueChange={(next) =>
-                            onWidthChange(Math.min(next, originalWidth))
+                            onWidthChange(Math.min(next, frameWidth))
                         }
                     />
                     <span className="shrink-0 font-mono text-sm text-muted-foreground">
@@ -80,7 +120,7 @@ export function SettingsPanel({
                     </span>
                 </label>
                 <p className="text-xs text-muted-foreground">
-                    Height follows the width. Enlarging past {originalWidth} px
+                    Height follows the frame. Enlarging past {frameWidth} px
                     would only invent pixels, so it stops there.
                 </p>
             </Section>

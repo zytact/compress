@@ -1,5 +1,11 @@
 let wasm;
 
+function _assertClass(instance, klass) {
+    if (!(instance instanceof klass)) {
+        throw new Error(`expected instance of ${klass.name}`);
+    }
+}
+
 function getArrayU8FromWasm0(ptr, len) {
     ptr = ptr >>> 0;
     return getUint8ArrayMemory0().subarray(ptr / 1, ptr / 1 + len);
@@ -109,6 +115,10 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
+const CropFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_crop_free(ptr >>> 0, 1));
+
 const EncodedImageFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_encodedimage_free(ptr >>> 0, 1));
@@ -120,6 +130,35 @@ const FitResultFinalization = (typeof FinalizationRegistry === 'undefined')
 const ImageSourceFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_imagesource_free(ptr >>> 0, 1));
+
+/**
+ * A rectangle of the source in source pixels, which is all that gets encoded.
+ */
+export class Crop {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        CropFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_crop_free(ptr, 0);
+    }
+    /**
+     * @param {number} x
+     * @param {number} y
+     * @param {number} width
+     * @param {number} height
+     */
+    constructor(x, y, width, height) {
+        const ret = wasm.crop_new(x, y, width, height);
+        this.__wbg_ptr = ret >>> 0;
+        CropFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+}
+if (Symbol.dispose) Crop.prototype[Symbol.dispose] = Crop.prototype.free;
 
 /**
  * Encoded bytes together with the dimensions they were encoded at, so the
@@ -244,15 +283,17 @@ export class ImageSource {
     /**
      * Encode at the highest JPEG quality that still lands under `target_bytes`.
      *
-     * Resizes once up front so a target size and a target width can be asked
-     * for together, then binary searches quality over the resized image.
+     * Crops and resizes once up front so a target size and a target width can
+     * be asked for together, then binary searches quality over the result.
      *
      * # Arguments
+     * * `crop` - Region of the source to keep
      * * `width` - Target width
      * * `height` - Target height
      * * `target_bytes` - Size the output must stay under
      * * `floor_quality` - Minimum JPEG quality (default 30)
      * * `ceil_quality` - Maximum JPEG quality (default 95)
+     * @param {Crop} crop
      * @param {number} width
      * @param {number} height
      * @param {number} target_bytes
@@ -260,8 +301,10 @@ export class ImageSource {
      * @param {number | null} [ceil_quality]
      * @returns {FitResult}
      */
-    fit_to_filesize(width, height, target_bytes, floor_quality, ceil_quality) {
-        const ret = wasm.imagesource_fit_to_filesize(this.__wbg_ptr, width, height, target_bytes, isLikeNone(floor_quality) ? 0xFFFFFF : floor_quality, isLikeNone(ceil_quality) ? 0xFFFFFF : ceil_quality);
+    fit_to_filesize(crop, width, height, target_bytes, floor_quality, ceil_quality) {
+        _assertClass(crop, Crop);
+        var ptr0 = crop.__destroy_into_raw();
+        const ret = wasm.imagesource_fit_to_filesize(this.__wbg_ptr, ptr0, width, height, target_bytes, isLikeNone(floor_quality) ? 0xFFFFFF : floor_quality, isLikeNone(ceil_quality) ? 0xFFFFFF : ceil_quality);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
@@ -289,21 +332,25 @@ export class ImageSource {
         return ret >>> 0;
     }
     /**
-     * Encode at an exact size.
+     * Crop to a region of the source, then encode it at an exact size.
      *
      * # Arguments
+     * * `crop` - Region of the source to keep
      * * `width` - Target width
      * * `height` - Target height
      * * `format` - Output format (Jpeg, Png, Original)
      * * `quality` - JPEG quality 1-100 (optional, default 85)
+     * @param {Crop} crop
      * @param {number} width
      * @param {number} height
      * @param {OutputFormat} format
      * @param {number | null} [quality]
      * @returns {EncodedImage}
      */
-    encode(width, height, format, quality) {
-        const ret = wasm.imagesource_encode(this.__wbg_ptr, width, height, format, isLikeNone(quality) ? 0xFFFFFF : quality);
+    encode(crop, width, height, format, quality) {
+        _assertClass(crop, Crop);
+        var ptr0 = crop.__destroy_into_raw();
+        const ret = wasm.imagesource_encode(this.__wbg_ptr, ptr0, width, height, format, isLikeNone(quality) ? 0xFFFFFF : quality);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
