@@ -11,9 +11,8 @@ import { usesQuality } from '@/lib/compress';
 interface SettingsPanelProps {
     aspect: number | null;
     onAspectChange: (aspect: number | null) => void;
-    /** The framed part of the source; the output width never exceeds it. */
-    frameWidth: number;
-    frameHeight: number;
+    /** The output width never exceeds the cropped width. */
+    cropWidth: number;
     originalFormat: SourceFormat | null;
     width: number;
     height: number;
@@ -29,7 +28,7 @@ interface SettingsPanelProps {
     fitNote: string | null;
 }
 
-const FRAME_SHAPES = [
+const CROP_SHAPES = [
     { label: 'Original', aspect: null },
     { label: '1:1', aspect: 1 },
     { label: '4:5', aspect: 4 / 5 },
@@ -40,14 +39,13 @@ const FRAME_SHAPES = [
 
 const SCALES = [1, 0.75, 0.5, 0.25];
 
-const scaledWidth = (frameWidth: number, scale: number) =>
-    Math.max(1, Math.round(frameWidth * scale));
+const scaledWidth = (cropWidth: number, scale: number) =>
+    Math.max(1, Math.round(cropWidth * scale));
 
 export function SettingsPanel({
     aspect,
     onAspectChange,
-    frameWidth,
-    frameHeight,
+    cropWidth,
     originalFormat,
     width,
     height,
@@ -62,38 +60,27 @@ export function SettingsPanel({
     fitting,
     fitNote,
 }: SettingsPanelProps) {
-    const activeShape = FRAME_SHAPES.findIndex(
+    const activeShape = CROP_SHAPES.findIndex(
         (shape) => shape.aspect === aspect,
     );
     const activeScale =
-        SCALES.find((scale) => scaledWidth(frameWidth, scale) === width) ??
-        null;
+        SCALES.find((scale) => scaledWidth(cropWidth, scale) === width) ?? null;
     const jpegOut = usesQuality(format, originalFormat);
 
     return (
         <div className="divide-y divide-border rounded-none border border-border bg-card">
-            <Section
-                title="Frame"
-                readout={`${frameWidth} × ${frameHeight} px`}
-            >
+            <Section title="Crop and size" readout={`${width} × ${height} px`}>
                 <Segmented
-                    label="Frame shape"
+                    label="Crop shape"
                     value={activeShape}
-                    options={FRAME_SHAPES.map(({ label }, index) => ({
+                    options={CROP_SHAPES.map(({ label }, index) => ({
                         value: index,
                         label,
                     }))}
                     onChange={(index) =>
-                        onAspectChange(FRAME_SHAPES[index].aspect)
+                        onAspectChange(CROP_SHAPES[index].aspect)
                     }
                 />
-                <p className="text-xs text-muted-foreground">
-                    The part of the source you keep. Drag and zoom the picture
-                    under the frame to pick it.
-                </p>
-            </Section>
-
-            <Section title="Size" readout={`${width} × ${height} px`}>
                 <Segmented
                     label="Scale"
                     value={activeScale}
@@ -102,7 +89,7 @@ export function SettingsPanel({
                         label: `${scale * 100}%`,
                     }))}
                     onChange={(scale) =>
-                        onWidthChange(scaledWidth(frameWidth, scale))
+                        onWidthChange(scaledWidth(cropWidth, scale))
                     }
                 />
                 <label className="flex items-center gap-3">
@@ -112,7 +99,7 @@ export function SettingsPanel({
                     <NumberInput
                         value={width}
                         onValueChange={(next) =>
-                            onWidthChange(Math.min(next, frameWidth))
+                            onWidthChange(Math.min(next, cropWidth))
                         }
                     />
                     <span className="shrink-0 font-mono text-sm text-muted-foreground">
@@ -120,8 +107,8 @@ export function SettingsPanel({
                     </span>
                 </label>
                 <p className="text-xs text-muted-foreground">
-                    Height follows the frame. Enlarging past {frameWidth} px
-                    would only invent pixels, so it stops there.
+                    Height follows the crop. Width stops at {cropWidth} px,
+                    since going bigger would only blur the image.
                 </p>
             </Section>
 

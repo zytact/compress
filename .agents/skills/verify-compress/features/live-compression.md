@@ -11,10 +11,10 @@ module worker calling the Rust WASM encoder, so the page never freezes.
   `useDebouncedValue` in `hooks/use-debounced-value.ts`.
 - **Byte bar**: original size, result size, the percent change, and a bar whose
   width is the ratio. It turns red and reads `LARGER` when a result grew.
-- **Compare wipe**: drag across the frame to move the seam between the original
-  and the result. Keyboard-driven too: arrows step 2%, PageUp/PageDown step 10%.
-  The `ORIGINAL` and `COMPRESSED` captions fade out as the seam reaches them.
-- **Compressing badge**: an in-flight indicator inside the frame; the result
+- **Result in the crop box**: the crop box shows the compressed result, with a
+  `COMPRESSED` chip. Holding `Hold to see original` (or Space, when focus is not
+  on a control) swaps in the original and flips the chip to `ORIGINAL`.
+- **Compressing badge**: an in-flight indicator inside the crop box; the result
   image also drops to 40% opacity while stale.
 - **Never-larger guarantee**: if encoding cannot beat the source, the source is
   returned unchanged and a notice explains which control to reach for.
@@ -40,13 +40,14 @@ after=$(node $D eval "$U" 'document.querySelector("main [role=img]").getAttribut
 printf 'before: %s\nafter:  %s\n' "$before" "$after"
 ```
 
-The compare wipe, read off the element that owns the split:
+Hold to see original, read off the result image while the key is down. `key`
+sends a full press, so dispatch the halves to see the held state:
 
 ```bash
-node $D key "$U" '[aria-label="Compare position"]' ArrowLeft 10
-node $D eval "$U" 'JSON.stringify({
-  now: document.querySelector("[aria-label=\"Compare position\"]").getAttribute("aria-valuenow"),
-  clip: getComputedStyle(document.querySelector("img[alt=Compressed]")).clipPath })'
+node $D eval "$U" 'dispatchEvent(new KeyboardEvent("keydown", { code: "Space" }))'
+node $D eval "$U" 'getComputedStyle(document.querySelector("img[alt=Compressed]")).visibility'  # hidden
+node $D eval "$U" 'dispatchEvent(new KeyboardEvent("keyup", { code: "Space" }))'
+node $D eval "$U" 'getComputedStyle(document.querySelector("img[alt=Compressed]")).visibility'  # visible
 ```
 
 ## What proves it works

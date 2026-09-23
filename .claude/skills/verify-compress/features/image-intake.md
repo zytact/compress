@@ -49,7 +49,7 @@ matters and lies about nothing.
 
 - The header reads `1600 x 1200 - JPEG - 1.05 MB` for `sample.jpg`. The four
   values come from three different places, so a wrong one is a real defect.
-- The compare frame shows the picture, not a broken image icon:
+- The crop box shows the picture, not a broken image icon:
   `document.querySelector('img[alt=Original]').naturalWidth` is 1600.
 - After `Replace image` with `sample.png`, the header format flips to `PNG` and
   the width field resets to the new image's width.
