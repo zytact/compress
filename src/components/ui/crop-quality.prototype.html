@@ -1,0 +1,609 @@
+<!doctype html>
+<!--
+    PROTOTYPE, throwaway. Crop editor as variant C, with three ways to check
+    compression quality. Switch with ?variant=A|B|C, the floating bar, or the
+    arrow keys. Open the file directly in a browser. The "compressed" image is a
+    real JPEG/PNG encoded by the browser's canvas, so artifacts and sizes are
+    close to the app's, not identical.
+-->
+<html lang="en" class="dark">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Compress - quality check prototype</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+            rel="stylesheet"
+            href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap"
+        />
+        <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+        <style type="text/tailwindcss">
+            @custom-variant dark (&:is(.dark *));
+            :root {
+                --background: #f6f7fa;
+                --foreground: #0f131b;
+                --card: #ffffff;
+                --primary: #3d6b4f;
+                --primary-foreground: #ffffff;
+                --muted: #eef0f5;
+                --muted-foreground: #5a6373;
+                --border: #dce0e9;
+                --source: #0b8ea3;
+                --source-soft: #0b8ea31f;
+                --result: #3d6b4f;
+                --signal: #a56a0a;
+            }
+            .dark {
+                --background: #0b0e14;
+                --foreground: #e6eaf2;
+                --card: #12161f;
+                --primary: #8fb69e;
+                --primary-foreground: #0e1a12;
+                --muted: #171d27;
+                --muted-foreground: #8c95a6;
+                --border: #232b38;
+                --source: #35d6e8;
+                --source-soft: #35d6e824;
+                --result: #8fb69e;
+                --signal: #f5c542;
+            }
+            @theme inline {
+                --font-display: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif;
+                --font-sans: 'Inter Tight', ui-sans-serif, system-ui, sans-serif;
+                --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+                --color-background: var(--background);
+                --color-foreground: var(--foreground);
+                --color-card: var(--card);
+                --color-primary: var(--primary);
+                --color-primary-foreground: var(--primary-foreground);
+                --color-muted: var(--muted);
+                --color-muted-foreground: var(--muted-foreground);
+                --color-border: var(--border);
+                --color-source: var(--source);
+                --color-source-soft: var(--source-soft);
+                --color-result: var(--result);
+                --color-signal: var(--signal);
+            }
+            @layer base {
+                * {
+                    @apply border-border;
+                }
+                body {
+                    @apply m-0 bg-background font-sans text-foreground antialiased;
+                }
+                .font-mono {
+                    font-variant-numeric: tabular-nums;
+                }
+            }
+            input[type='range'] {
+                accent-color: var(--primary);
+            }
+        </style>
+    </head>
+    <body class="flex min-h-screen flex-col">
+        <header class="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
+            <span class="font-display text-xl font-extrabold">compress</span>
+            <button id="theme" class="border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground">Theme</button>
+        </header>
+        <main id="app" class="flex-1 pb-28"></main>
+
+        <div class="fixed inset-x-0 bottom-5 z-50 mx-auto flex w-fit items-center gap-1 rounded-full bg-white px-2 py-1.5 text-sm text-black shadow-[0_8px_30px_rgba(0,0,0,.45)] ring-1 ring-black/10">
+            <button id="prev" class="rounded-full px-3 py-1 hover:bg-black/10">←</button>
+            <span id="variant-label" class="min-w-72 text-center font-medium"></span>
+            <button id="next" class="rounded-full px-3 py-1 hover:bg-black/10">→</button>
+        </div>
+
+        <script>
+            const VARIANTS = {
+                A: {
+                    name: 'Hold to see original',
+                    note: 'The crop box shows the compressed result. Press and hold the button (or Space) to see the original in its place.',
+                },
+                B: {
+                    name: 'Crop only, no compare',
+                    note: 'Exactly C. The crop box shows the original. You judge quality from the size readout and the download.',
+                },
+                C: {
+                    name: 'Before/after slider below',
+                    note: 'The crop view stays as is. A second preview under it shows the cropped result with a before/after slider.',
+                },
+            };
+            const SHAPES = [
+                ['Original', null],
+                ['1:1', 1],
+                ['4:5', 4 / 5],
+                ['3:2', 3 / 2],
+                ['16:9', 16 / 9],
+                ['9:16', 9 / 16],
+            ];
+            const SCALES = [1, 0.75, 0.5, 0.25];
+            const MAX_ZOOM = 4;
+
+            const S = {
+                img: null,
+                url: '',
+                name: '',
+                W: 0,
+                H: 0,
+                bytes: 0,
+                png: false,
+                aspect: null,
+                zoom: 1,
+                cx: 0,
+                cy: 0,
+                width: 0,
+                format: 'keep',
+                quality: 85,
+                holding: false,
+                split: 50,
+                out: { url: '', size: 0, key: '' },
+            };
+
+            const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+            const fmtBytes = (b) => (b >= 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(2)} MB` : `${(b / 1024).toFixed(1)} KB`);
+            const $ = (id) => document.getElementById(id);
+
+            function crop() {
+                const ar = S.aspect ?? S.W / S.H;
+                const full = Math.min(S.W, S.H * ar);
+                const side = (f, max) => Math.min(max, Math.max(1, Math.round(f / S.zoom)));
+                const w = side(full, S.W);
+                const h = side(full / ar, S.H);
+                const place = (c, size, max) => Math.min(max - size, Math.max(0, Math.round(c - size / 2)));
+                return { x: place(S.cx, w, S.W), y: place(S.cy, h, S.H), w, h };
+            }
+            const output = (c = crop()) => {
+                const w = Math.max(1, Math.min(S.width, c.w));
+                return { w, h: Math.max(1, Math.round((w * c.h) / c.w)) };
+            };
+            const keyOf = (c, o) => `${c.x},${c.y},${c.w},${c.h},${o.w},${o.h},${S.format},${S.quality}`;
+
+            // ---------- page ----------
+
+            const section = (title, readoutId, body) => `
+<section class="space-y-3 p-4">
+  <div class="flex items-baseline justify-between gap-3">
+    <h2 class="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">${title}</h2>
+    ${readoutId ? `<span id="${readoutId}" class="font-mono text-sm tabular-nums"></span>` : ''}
+  </div>
+  ${body}
+</section>`;
+            const segmented = (group, options) => `
+<div class="flex gap-1 bg-muted p-1" data-group="${group}">
+  ${options.map(([label], i) => `<button data-group="${group}" data-index="${i}" class="flex-1 px-1.5 py-1.5 text-sm font-medium whitespace-nowrap transition-colors">${label}</button>`).join('')}
+</div>`;
+
+            const stageHtml = (variant) => `
+<div id="stage" class="relative cursor-grab touch-none overflow-hidden border border-border bg-muted select-none active:cursor-grabbing">
+  <img id="src" draggable="false" class="pointer-events-none absolute max-w-none"/>
+  ${variant === 'A' ? '<img id="result" draggable="false" class="pointer-events-none absolute max-w-none"/>' : ''}
+  <div id="frame" class="pointer-events-none absolute outline outline-1 outline-white" style="box-shadow:0 0 0 9999px rgb(0 0 0 / .6)">
+    <div class="absolute inset-0 grid grid-cols-3 grid-rows-3">${'<span class="border-r border-b border-white/20"></span>'.repeat(9)}</div>
+    <span id="frame-label" class="absolute bottom-full left-0 mb-1.5 font-mono text-[0.6875rem] tracking-widest text-white/80"></span>
+    ${variant === 'A' ? '<span id="showing" class="absolute top-2 right-2 bg-black/70 px-2 py-0.5 font-mono text-[0.6875rem] tracking-widest uppercase"></span>' : ''}
+  </div>
+</div>
+<div class="flex items-center gap-3">
+  <span class="shrink-0 text-sm text-muted-foreground">Zoom</span>
+  <input id="zoom" type="range" min="1" max="${MAX_ZOOM}" step="0.01" class="w-full"/>
+  <span id="zoom-readout" class="w-12 shrink-0 text-right font-mono text-sm"></span>
+</div>
+<div class="flex flex-wrap items-center justify-between gap-3">
+  <p class="text-xs text-muted-foreground">Drag the image to move it. Scroll or use the slider to zoom.</p>
+  ${
+      variant === 'A'
+          ? `<button id="hold" class="flex items-center gap-2 border border-border bg-card px-3 py-1.5 text-sm font-medium select-none hover:border-foreground/40 active:bg-muted">
+               Hold to see original <kbd class="border border-border px-1 font-mono text-[0.625rem] text-muted-foreground">Space</kbd>
+             </button>`
+          : ''
+  }
+</div>`;
+
+            const wipeHtml = () => `
+<div class="space-y-2">
+  <h2 class="text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">Before and after</h2>
+  <div class="flex justify-center bg-muted">
+    <div id="wipe" class="relative max-h-[22rem] cursor-ew-resize touch-none overflow-hidden border border-border select-none">
+      <img id="wipe-src" draggable="false" class="pointer-events-none absolute max-w-none"/>
+      <img id="wipe-result" draggable="false" class="pointer-events-none absolute inset-0 h-full w-full"/>
+      <span class="pointer-events-none absolute top-2 left-2 bg-black/70 px-2 py-0.5 font-mono text-[0.6875rem] tracking-widest text-source uppercase">Original</span>
+      <span class="pointer-events-none absolute top-2 right-2 bg-black/70 px-2 py-0.5 font-mono text-[0.6875rem] tracking-widest text-result uppercase">Compressed</span>
+      <span id="wipe-line" class="pointer-events-none absolute inset-y-0 w-0.5 -translate-x-1/2 bg-white shadow"></span>
+    </div>
+  </div>
+  <p class="text-xs text-muted-foreground">Drag across the picture to compare the original with the compressed result.</p>
+</div>`;
+
+            function renderPage(variant) {
+                $('app').innerHTML = `
+<div class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6">
+  <p class="mb-4 border border-dashed border-border p-2 text-xs text-muted-foreground"><b class="text-foreground">Prototype ${variant}.</b> ${VARIANTS[variant].note} Everything else is the same in all three.</p>
+  <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+    <p class="min-w-0 text-sm">
+      <span id="file-name" class="block truncate font-medium"></span>
+      <span id="file-meta" class="font-mono text-xs text-muted-foreground"></span>
+    </p>
+    <label class="cursor-pointer border border-border px-3 py-2 text-sm hover:border-foreground/40">Replace image<input id="file" type="file" accept="image/*" class="hidden"/></label>
+  </div>
+  <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+    <div class="space-y-5">
+      <div class="space-y-3">${stageHtml(variant)}</div>
+      ${variant === 'C' ? wipeHtml() : ''}
+      <div class="space-y-3">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <div class="flex items-end gap-3 font-mono">
+            <span class="block"><span class="block text-[0.6875rem] tracking-widest text-source uppercase">Original</span><span id="orig-size" class="block text-lg font-medium"></span></span>
+            <span class="pb-0.5 text-muted-foreground">→</span>
+            <span class="block"><span class="block text-[0.6875rem] tracking-widest text-result uppercase">Compressed</span><span id="out-size" class="block text-lg font-medium"></span></span>
+          </div>
+          <p id="change" class="text-right"><span id="change-pct" class="block font-mono text-4xl leading-none font-bold sm:text-5xl"></span><span id="change-word" class="block text-[0.6875rem] tracking-widest uppercase"></span></p>
+        </div>
+        <div class="h-2 overflow-hidden bg-source-soft"><div id="bar" class="h-full"></div></div>
+      </div>
+    </div>
+    <div class="space-y-4">
+      <div class="divide-y divide-border border border-border bg-card">
+        ${section(
+            'Crop and size',
+            'size-readout',
+            `${segmented('shape', SHAPES)}
+             ${segmented('scale', SCALES.map((s) => [`${s * 100}%`]))}
+             <label class="flex items-center gap-3">
+               <span class="w-14 shrink-0 text-sm text-muted-foreground">Width</span>
+               <input id="width" inputmode="numeric" class="w-full min-w-0 border border-border bg-background px-3 py-2 font-mono text-sm focus-visible:outline-none"/>
+               <span class="font-mono text-sm text-muted-foreground">px</span>
+             </label>
+             <p id="size-note" class="text-xs text-muted-foreground"></p>`,
+        )}
+        ${section('Format', '', segmented('format', [['Keep original'], ['JPEG'], ['PNG']]))}
+        ${section(
+            'Quality',
+            'quality-readout',
+            `<input id="quality" type="range" min="1" max="100" class="w-full"/>
+             <div class="flex justify-between text-xs text-muted-foreground"><span>Smaller file</span><span>Sharper picture</span></div>`,
+        )}
+        ${section(
+            'Fit to a size',
+            '',
+            `<div class="flex items-center gap-3">
+               <input value="500" class="w-full border border-border bg-background px-3 py-2 font-mono text-sm"/>
+               <span class="font-mono text-sm text-muted-foreground">KB</span>
+               <button class="shrink-0 border border-border px-3 py-2 text-sm font-medium">Fit</button>
+             </div>
+             <p class="text-xs text-muted-foreground">Or name a size and let it pick the quality that lands just under. (Not wired in the mock.)</p>`,
+        )}
+      </div>
+      <a id="download" class="flex w-full items-center justify-center gap-2 bg-primary px-4 py-3 text-sm font-medium text-primary-foreground">↓ Download</a>
+      <p class="text-center text-xs text-muted-foreground">Nothing leaves this tab.</p>
+    </div>
+  </div>
+</div>`;
+                bindPage();
+                update();
+            }
+
+            // ---------- update, without rebuilding controls mid-drag ----------
+
+            function update() {
+                if (!S.img) return;
+                const c = crop();
+                const o = output(c);
+                const fa = c.w / c.h;
+
+                // A wide crop gets a wide stage instead of black bars
+                const stageAr = Math.max(4 / 3, fa * 1.12);
+                const SH = 100 / stageAr;
+                const fw = Math.min(88, SH * 0.88 * fa);
+                const fh = fw / fa;
+                const fl = (100 - fw) / 2;
+                const ft = (SH - fh) / 2;
+                const s = fw / c.w;
+                const v = (u) => `${(u / SH) * 100}%`;
+                S.stage = { s };
+
+                const stage = $('stage');
+                stage.style.aspectRatio = `${stageAr}`;
+                Object.assign($('src').style, { left: `${fl - c.x * s}%`, top: v(ft - c.y * s), width: `${S.W * s}%`, height: v(S.H * s) });
+                $('src').src = S.url;
+                Object.assign($('frame').style, { left: `${fl}%`, top: v(ft), width: `${fw}%`, height: v(fh) });
+                $('frame-label').textContent = `${o.w} × ${o.h}`;
+
+                const fresh = S.out.key === keyOf(c, o);
+                if ($('result')) {
+                    Object.assign($('result').style, { left: `${fl}%`, top: v(ft), width: `${fw}%`, height: v(fh) });
+                    $('result').src = S.out.url;
+                    $('result').style.visibility = fresh && !S.holding ? 'visible' : 'hidden';
+                    $('showing').textContent = S.holding ? 'Original' : 'Compressed';
+                    $('showing').className = `absolute top-2 right-2 bg-black/70 px-2 py-0.5 font-mono text-[0.6875rem] tracking-widest uppercase ${S.holding ? 'text-source' : 'text-result'}`;
+                }
+
+                if ($('wipe')) {
+                    const wipe = $('wipe');
+                    wipe.style.aspectRatio = `${c.w} / ${c.h}`;
+                    wipe.style.width = `min(100%, ${22 * fa}rem)`;
+                    Object.assign($('wipe-src').style, { width: `${(S.W / c.w) * 100}%`, left: `${(-c.x / c.w) * 100}%`, top: `${(-c.y / c.h) * 100}%` });
+                    $('wipe-src').src = S.url;
+                    $('wipe-result').src = S.out.url;
+                    $('wipe-result').style.visibility = fresh ? 'visible' : 'hidden';
+                    $('wipe-result').style.clipPath = `inset(0 0 0 ${S.split}%)`;
+                    $('wipe-line').style.left = `${S.split}%`;
+                }
+
+                if (document.activeElement !== $('zoom')) $('zoom').value = S.zoom;
+                $('zoom-readout').textContent = `${Math.round(S.zoom * 100)}%`;
+
+                $('file-name').textContent = S.name;
+                $('file-meta').textContent = `${S.W} × ${S.H} · ${S.png ? 'PNG' : 'JPEG'} · ${fmtBytes(S.bytes)}`;
+                $('size-readout').textContent = `${o.w} × ${o.h} px`;
+                if (document.activeElement !== $('width')) $('width').value = o.w;
+                $('size-note').textContent = `Height follows the crop. Width stops at ${c.w} px, since going bigger would only blur the image.`;
+                $('quality').value = S.quality;
+                $('quality-readout').textContent = S.quality;
+
+                paintGroup('shape', SHAPES.findIndex(([, a]) => a === S.aspect));
+                paintGroup('scale', SCALES.findIndex((sc) => Math.max(1, Math.round(c.w * sc)) === o.w));
+                paintGroup('format', ['keep', 'jpeg', 'png'].indexOf(S.format));
+
+                const size = fresh ? S.out.size : null;
+                $('orig-size').textContent = fmtBytes(S.bytes);
+                $('out-size').textContent = size === null ? '…' : fmtBytes(size);
+                const ratio = size === null ? 1 : size / S.bytes;
+                $('change-pct').textContent = size === null ? '…' : `${Math.abs(Math.round((1 - ratio) * 100))}%`;
+                $('change-word').textContent = ratio > 1 ? 'larger' : 'smaller';
+                $('change').className = `text-right ${ratio > 1 ? 'text-signal' : 'text-result'}`;
+                $('bar').style.width = `${Math.min(100, ratio * 100)}%`;
+                $('bar').className = `h-full ${ratio > 1 ? 'bg-signal' : 'bg-result'}`;
+                $('download').href = S.out.url;
+                $('download').download = S.name.replace(/\.[^.]+$/, '') + '-compressed.' + (usesPng() ? 'png' : 'jpg');
+                $('download').textContent = size === null ? '↓ Download' : `↓ Download ${fmtBytes(size)}`;
+
+                if (!fresh) scheduleEncode();
+            }
+
+            function paintGroup(group, active) {
+                document.querySelectorAll(`button[data-group="${group}"]`).forEach((b) => {
+                    b.className = `flex-1 px-1.5 py-1.5 text-sm font-medium whitespace-nowrap transition-colors ${
+                        Number(b.dataset.index) === active ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                    }`;
+                });
+            }
+
+            const usesPng = () => S.format === 'png' || (S.format === 'keep' && S.png);
+
+            let encodeTimer;
+            function scheduleEncode() {
+                clearTimeout(encodeTimer);
+                encodeTimer = setTimeout(encode, 150);
+            }
+            async function encode() {
+                const c = crop();
+                const o = output(c);
+                const key = keyOf(c, o);
+                const canvas = document.createElement('canvas');
+                canvas.width = o.w;
+                canvas.height = o.h;
+                const ctx = canvas.getContext('2d');
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(S.img, c.x, c.y, c.w, c.h, 0, 0, o.w, o.h);
+                const blob = await new Promise((r) => canvas.toBlob(r, usesPng() ? 'image/png' : 'image/jpeg', S.quality / 100));
+                if (S.out.url) URL.revokeObjectURL(S.out.url);
+                S.out = { url: URL.createObjectURL(blob), size: blob.size, key };
+                update();
+            }
+
+            // ---------- events ----------
+
+            function bindPage() {
+                const stage = $('stage');
+                let pan = null;
+                stage.addEventListener('pointerdown', (e) => {
+                    if (e.button !== 0) return;
+                    stage.setPointerCapture(e.pointerId);
+                    const c = crop();
+                    pan = { x: e.clientX, y: e.clientY, cx: c.x + c.w / 2, cy: c.y + c.h / 2, per: 100 / (stage.getBoundingClientRect().width * S.stage.s) };
+                });
+                stage.addEventListener('pointermove', (e) => {
+                    if (!pan) return;
+                    S.cx = pan.cx - (e.clientX - pan.x) * pan.per;
+                    S.cy = pan.cy - (e.clientY - pan.y) * pan.per;
+                    const c = crop();
+                    S.cx = c.x + c.w / 2;
+                    S.cy = c.y + c.h / 2;
+                    update();
+                });
+                const endPan = () => (pan = null);
+                stage.addEventListener('pointerup', endPan);
+                stage.addEventListener('pointercancel', endPan);
+                stage.addEventListener(
+                    'wheel',
+                    (e) => {
+                        e.preventDefault();
+                        S.zoom = clamp(S.zoom * Math.exp(-e.deltaY * 0.0015), 1, MAX_ZOOM);
+                        update();
+                    },
+                    { passive: false },
+                );
+
+                $('zoom').addEventListener('input', (e) => {
+                    S.zoom = Number(e.target.value);
+                    update();
+                });
+                $('quality').addEventListener('input', (e) => {
+                    S.quality = Number(e.target.value);
+                    update();
+                });
+                $('width').addEventListener('input', (e) => {
+                    const n = parseInt(e.target.value.replace(/\D/g, ''), 10) || 0;
+                    S.width = Math.min(n, crop().w);
+                    update();
+                });
+                $('width').addEventListener('blur', update);
+
+                const hold = $('hold');
+                if (hold) {
+                    const set = (on) => {
+                        S.holding = on;
+                        update();
+                    };
+                    hold.addEventListener('pointerdown', () => set(true));
+                    ['pointerup', 'pointerleave', 'pointercancel'].forEach((t) => hold.addEventListener(t, () => set(false)));
+                }
+
+                const wipe = $('wipe');
+                if (wipe) {
+                    const move = (e) => {
+                        const r = wipe.getBoundingClientRect();
+                        S.split = clamp(((e.clientX - r.left) / r.width) * 100, 0, 100);
+                        update();
+                    };
+                    wipe.addEventListener('pointerdown', (e) => {
+                        wipe.setPointerCapture(e.pointerId);
+                        move(e);
+                    });
+                    wipe.addEventListener('pointermove', (e) => wipe.hasPointerCapture(e.pointerId) && move(e));
+                }
+
+                $('file').addEventListener('change', (e) => e.target.files[0] && loadFile(e.target.files[0]));
+            }
+
+            document.addEventListener('click', (e) => {
+                const b = e.target.closest('button[data-group]');
+                if (!b) return;
+                const i = Number(b.dataset.index);
+                const c = crop();
+                if (b.dataset.group === 'shape') {
+                    S.aspect = SHAPES[i][1];
+                    S.zoom = 1;
+                    S.cx = S.W / 2;
+                    S.cy = S.H / 2;
+                }
+                if (b.dataset.group === 'scale') S.width = Math.max(1, Math.round(c.w * SCALES[i]));
+                if (b.dataset.group === 'format') S.format = ['keep', 'jpeg', 'png'][i];
+                update();
+            });
+
+            const typing = (t) => t.closest('input, textarea, [contenteditable]');
+            document.addEventListener('keydown', (e) => {
+                if (typing(e.target)) return;
+                if (e.key === 'ArrowLeft') go(-1);
+                if (e.key === 'ArrowRight') go(1);
+                if (e.code === 'Space' && $('hold')) {
+                    e.preventDefault();
+                    if (!S.holding) {
+                        S.holding = true;
+                        update();
+                    }
+                }
+            });
+            document.addEventListener('keyup', (e) => {
+                if (e.code === 'Space' && S.holding) {
+                    S.holding = false;
+                    update();
+                }
+            });
+
+            const KEYS = Object.keys(VARIANTS);
+            let key = new URLSearchParams(location.search).get('variant')?.toUpperCase();
+            if (!KEYS.includes(key)) key = 'A';
+            function go(step) {
+                key = KEYS[(KEYS.indexOf(key) + step + KEYS.length) % KEYS.length];
+                const url = new URL(location.href);
+                url.searchParams.set('variant', key);
+                history.replaceState(null, '', url);
+                show();
+            }
+            function show() {
+                $('variant-label').textContent = `${key} (${VARIANTS[key].name})`;
+                S.holding = false;
+                renderPage(key);
+            }
+            $('prev').onclick = () => go(-1);
+            $('next').onclick = () => go(1);
+            $('theme').onclick = () => document.documentElement.classList.toggle('dark');
+
+            // ---------- images ----------
+
+            function loadFile(file) {
+                const url = URL.createObjectURL(file);
+                const img = new Image();
+                img.onload = () => {
+                    Object.assign(S, {
+                        img,
+                        url,
+                        name: file.name,
+                        W: img.naturalWidth,
+                        H: img.naturalHeight,
+                        bytes: file.size,
+                        png: /\.png$/i.test(file.name),
+                        aspect: null,
+                        zoom: 1,
+                        cx: img.naturalWidth / 2,
+                        cy: img.naturalHeight / 2,
+                        width: img.naturalWidth,
+                        out: { url: '', size: 0, key: '' },
+                    });
+                    update();
+                };
+                img.src = url;
+            }
+
+            // A noisy, detailed sample so compression artifacts actually show
+            function sampleImage() {
+                const W = 1600;
+                const H = 1067;
+                const cv = document.createElement('canvas');
+                cv.width = W;
+                cv.height = H;
+                const g = cv.getContext('2d');
+                const sky = g.createLinearGradient(0, 0, 0, H * 0.62);
+                sky.addColorStop(0, '#1b2a4a');
+                sky.addColorStop(0.6, '#7a4f6d');
+                sky.addColorStop(1, '#f2a766');
+                g.fillStyle = sky;
+                g.fillRect(0, 0, W, H * 0.62);
+                g.fillStyle = '#ffd9a0';
+                g.beginPath();
+                g.arc(1150, 600, 90, 0, Math.PI * 2);
+                g.fill();
+                const ridge = (base, amp, color, seed) => {
+                    g.fillStyle = color;
+                    g.beginPath();
+                    g.moveTo(0, H);
+                    for (let x = 0; x <= W; x += 20) g.lineTo(x, base - Math.abs(Math.sin(x / 180 + seed) * amp) - Math.sin(x / 47 + seed) * amp * 0.15);
+                    g.lineTo(W, H);
+                    g.fill();
+                };
+                ridge(600, 220, '#4b4a6e', 1);
+                ridge(660, 120, '#2a2c45', 3);
+                const lake = g.createLinearGradient(0, H * 0.62, 0, H);
+                lake.addColorStop(0, '#b2785f');
+                lake.addColorStop(0.35, '#3a4a6b');
+                lake.addColorStop(1, '#121a2b');
+                g.fillStyle = lake;
+                g.fillRect(0, H * 0.62, W, H * 0.38);
+                g.fillStyle = '#0d1220';
+                g.beginPath();
+                g.moveTo(230, 330);
+                g.lineTo(130, 640);
+                g.lineTo(330, 640);
+                g.fill();
+                g.fillRect(220, 620, 22, 90);
+                g.fillStyle = '#fff';
+                g.font = '600 64px Inter Tight, sans-serif';
+                g.fillText('Fine text shows JPEG artifacts', 420, 930);
+                const d = g.getImageData(0, 0, W, H);
+                for (let i = 0; i < d.data.length; i += 4) {
+                    const n = (Math.random() - 0.5) * 26;
+                    d.data[i] += n;
+                    d.data[i + 1] += n;
+                    d.data[i + 2] += n;
+                }
+                g.putImageData(d, 0, 0);
+                cv.toBlob((blob) => loadFile(new File([blob], 'sample.jpg', { type: 'image/jpeg' })), 'image/jpeg', 0.95);
+            }
+
+            show();
+            sampleImage();
+        </script>
+    </body>
+</html>
