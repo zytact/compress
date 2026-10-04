@@ -7,11 +7,13 @@
     },
     "scripts": {
         "dev": "vite dev --port 3000",
-        "build:wasm": "cd wasm && wasm-pack build --target web --out-dir ../public/wasm",
+        "build:wasm": "cd wasm && RUSTFLAGS=\"--remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo --remap-path-prefix=$(rustc --print sysroot)=/rust --remap-path-prefix=$PWD=/src\" wasm-pack build --target web --out-dir ../public/wasm",
         "build": "vite build",
         "preview": "vite preview",
         "test": "vitest run",
         "lint": "eslint",
+        "typecheck": "tsc --noEmit",
+        "validate": "pnpm lint && prettier --check . && pnpm typecheck && pnpm test && pnpm build",
         "format": "prettier --write .",
         "check": "prettier --write . && eslint --fix",
         "prepare": "husky"

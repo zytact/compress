@@ -24,10 +24,8 @@ cd /home/arnab/Projects/compress && . ./.local/verify/session.env
 D=.agents/skills/verify-compress/scripts/drive.mjs && U="$COMPRESS_APP_URL"
 
 node $D eval "$U" 'document.querySelector("main button:has(svg.lucide-download)").textContent'
-node $D click "$U" 'main button:has(svg.lucide-download)'
-sleep 3
-ls -l "$COMPRESS_VERIFY_DOWNLOADS"
-file "$COMPRESS_VERIFY_DOWNLOADS"/*
+F=$(node $D download "$U" 'main button:has(svg.lucide-download)' | cut -f1)
+file "$F"
 ```
 
 Downloads land in this run's directory because `launch.sh` writes
@@ -55,9 +53,10 @@ this to CDP `Browser.setDownloadBehavior`: it renames the file to
 - No `saveAs` dialog: the anchor download completes on its own, and
   `prompt_for_download` is false in the profile. A run never blocks on a native
   dialog.
-- Chromium writes a `.crdownload` first. Three seconds is enough for these
-  sizes; for a larger fixture, poll for the final name instead of sleeping.
-- Downloading twice appends ` (1)` to the name, which then fails an exact-name
+- Chromium writes a `.crdownload` first. `download` waits for the rename and a
+  stable size, so do not `click` and sleep instead.
+- The profile allows automatic downloads, so a second download in the same tab
+  is not blocked behind a prompt. Downloading twice appends ` (1)` to the name, which then fails an exact-name
   check. Clear `$COMPRESS_VERIFY_DOWNLOADS` between downloads, or expect it.
 - Cleanup deletes the downloads directory with the rest of the run state. Copy
   anything a proof depends on into `.local/verify-evidence/` first.

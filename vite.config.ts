@@ -12,7 +12,8 @@ const config = defineConfig({
         format: 'es',
     },
     plugins: [
-        devtools(),
+        // The server event bus binds a fixed port, so a second dev server would crash
+        devtools({ eventBusConfig: { enabled: false } }),
         nitro(),
         // this is the plugin that enables path aliases
         viteTsConfigPaths({

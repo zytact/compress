@@ -29,7 +29,10 @@ disagree about how to verify the app are worse than one.
 
 It installs dependencies if `node_modules` is missing, starts `vite dev` on a
 free port with `--strictPort`, waits for the page to answer, points the profile's
-download directory at this run, and starts a browser with its own CDP port.
+download directory at this run, and starts a headless browser with its own CDP
+port. Headless is deliberate: a desktop compositor stops sending frames to a
+window it is not showing, and real mouse input then hangs. Use `shot` to see
+the page.
 
 Readiness is three signals in order: the dev server answering HTTP 200 at `/`,
 the CDP endpoint answering on its port, and the app tab actually hydrating. That
@@ -118,13 +121,20 @@ node $D upload "$U" 'input[type=file]' .local/verify/fixtures/sample.jpg
 node $D click "$U" 'main button:has(svg.lucide-download)'
 node $D fill  "$U" '[aria-label="Target size in kilobytes"]' 200
 node $D key   "$U" '[aria-label="Quality"]' ArrowLeft 10
+node $D drag  "$U" 'main [role=group]' -120 0     # real mouse press, move, release
+node $D wheel "$U" 'main [role=group]' -100 3     # real wheel over the element
+node $D download "$U" 'main button:has(svg.lucide-download)'   # prints path and bytes
 node $D shot  --full "$U" .local/verify-evidence/run/workspace.png
 ```
 
 `fill` goes through React's own value setter and dispatches `input`, because
 assigning `.value` updates the DOM and leaves React's copy stale. `key` focuses
 the element and sends real key events through CDP, which is how the Radix quality
-slider and the zoom slider are driven.
+slider and the zoom slider are driven. `drag` and `wheel` send real mouse input
+at the element's centre, so pointer capture, pan and wheel zoom run the same
+code a user's mouse does. `download` clicks, waits for a new finished file in
+`$COMPRESS_VERIFY_DOWNLOADS` and prints its path and size, so a proof never
+sleeps and globs for the file.
 
 ### Test images
 
@@ -206,7 +216,7 @@ EV=.local/verify-evidence/$(date -u +%Y%m%dT%H%M%SZ) && mkdir -p "$EV"
 node $D shot --full "$U" "$EV/after.png"
 node $D eval "$U" 'document.querySelector("main [role=img]").getAttribute("aria-label")' > "$EV/bytes.txt"
 node .agents/skills/verify-compress/scripts/doctor.mjs > "$EV/doctor.txt"
-cp "$COMPRESS_VERIFY_DOWNLOADS"/* "$EV/" 2>/dev/null || true
+F=$(node $D download "$U" 'main button:has(svg.lucide-download)' | cut -f1) && cp "$F" "$EV/"
 ```
 
 Proof standards for this repo:
@@ -252,10 +262,10 @@ or a dev server. `launch.sh` refuses to start while a session file exists.
 
 All are executable and take no arguments beyond what is shown above.
 
-| Script                | Purpose                                                                                                  |
-| --------------------- | -------------------------------------------------------------------------------------------------------- |
-| `scripts/launch.sh`   | Start the dev server and a dedicated browser, write `session.env`                                        |
-| `scripts/doctor.mjs`  | Eight read-only health checks, non-zero exit on any failure                                              |
-| `scripts/fixture.mjs` | Draw seeded `sample.jpg` and `sample.png` test images in the running browser                             |
-| `scripts/drive.mjs`   | CDP client: `targets`, `open`, `eval`, `text`, `wait`, `shot`, `upload`, `click`, `fill`, `key`, `close` |
-| `scripts/cleanup.sh`  | Close the browser, stop the dev server, remove run state, keep the evidence                              |
+| Script                | Purpose                                                                                                                               |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `scripts/launch.sh`   | Start the dev server and a dedicated browser, write `session.env`                                                                     |
+| `scripts/doctor.mjs`  | Eight read-only health checks, non-zero exit on any failure                                                                           |
+| `scripts/fixture.mjs` | Draw seeded `sample.jpg` and `sample.png` test images in the running browser                                                          |
+| `scripts/drive.mjs`   | CDP client: `targets`, `open`, `eval`, `text`, `wait`, `shot`, `upload`, `click`, `fill`, `key`, `drag`, `wheel`, `download`, `close` |
+| `scripts/cleanup.sh`  | Close the browser, stop the dev server, remove run state, keep the evidence                                                           |

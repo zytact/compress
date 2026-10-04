@@ -28,7 +28,7 @@ jobs:
             - name: Check formatting
               run: pnpm exec prettier --check .
             - name: Typecheck
-              run: pnpm exec tsc --noEmit
+              run: pnpm run typecheck
 
     test:
         name: Web tests

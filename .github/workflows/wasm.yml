@@ -4,11 +4,13 @@ on:
     pull_request:
         paths:
             - 'wasm/**'
+            - 'public/wasm/**'
             - '.github/workflows/wasm.yml'
     push:
         branches: [main]
         paths:
             - 'wasm/**'
+            - 'public/wasm/**'
             - '.github/workflows/wasm.yml'
 
 concurrency:
@@ -21,14 +23,12 @@ defaults:
 
 jobs:
     check:
-        name: Rust fmt and clippy
+        name: Rust fmt, clippy and tests
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v5
-            - uses: dtolnay/rust-toolchain@stable
-              with:
-                  components: rustfmt, clippy
-                  targets: wasm32-unknown-unknown
+            - name: Install pinned toolchain
+              run: rustup toolchain install
             - uses: Swatinem/rust-cache@v2
               with:
                   workspaces: wasm
@@ -36,3 +36,30 @@ jobs:
               run: cargo fmt --check
             - name: Clippy
               run: cargo clippy --all-targets --target wasm32-unknown-unknown -- -D warnings
+            - name: Test
+              run: cargo test
+
+    artifacts:
+        name: Committed WASM is current
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v5
+            - name: Install pinned toolchain
+              run: rustup toolchain install
+            - uses: Swatinem/rust-cache@v2
+              with:
+                  workspaces: wasm
+            - uses: pnpm/action-setup@v4
+              with:
+                  version: 11
+            - uses: actions/setup-node@v6
+              with:
+                  node-version-file: .node-version
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+              working-directory: .
+            - run: pnpm build:wasm
+              working-directory: .
+            - name: Fail if public/wasm differs from a fresh build
+              working-directory: .
+              run: git diff --exit-code -- public/wasm
