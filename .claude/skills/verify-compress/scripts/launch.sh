@@ -67,6 +67,8 @@ wait_for_http "$app_url"
 # Downloads are steered through the profile's own Preferences rather than CDP
 # Browser.setDownloadBehavior, which renames the file to download.<ext> and
 # destroys the "-compressed" filename this app builds and worth proving.
+# Automatic downloads are allowed too, or Chromium blocks every download after
+# the first in a tab behind a prompt CDP cannot answer.
 # Chromium rewrites Preferences on exit, so this is written on every launch.
 node -e '
 const {readFileSync, writeFileSync} = require("node:fs");
@@ -75,6 +77,8 @@ let prefs = {};
 try { prefs = JSON.parse(readFileSync(file, "utf8")); } catch {}
 prefs.download = {...prefs.download, default_directory: dir, prompt_for_download: false};
 prefs.savefile = {...prefs.savefile, default_directory: dir};
+prefs.profile = {...prefs.profile, default_content_setting_values: {
+  ...prefs.profile?.default_content_setting_values, automatic_downloads: 1}};
 writeFileSync(file, JSON.stringify(prefs));
 ' "$profile/Default/Preferences" "$downloads"
 
@@ -90,6 +94,8 @@ if [ -z "$browser" ]; then
   exit 1
 fi
 
+# Headless, because a desktop compositor stops sending frames to a window it is
+# not showing, and CDP mouse input then waits forever for one.
 echo "Starting $browser on CDP port $cdp_port..."
 "$browser" \
   --user-data-dir="$profile" \
@@ -99,6 +105,7 @@ echo "Starting $browser on CDP port $cdp_port..."
   --disable-search-engine-choice-screen \
   --hide-crash-restore-bubble \
   --window-size=1440,1000 \
+  --headless=new \
   "$app_url" \
   >"$run/browser.log" 2>&1 &
 browser_pid=$!

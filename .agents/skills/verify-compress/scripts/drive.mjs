@@ -12,6 +12,9 @@
 //   drive.mjs click  <match> <selector>      click an element
 //   drive.mjs fill   <match> <selector> <v>  set a React-controlled input's value
 //   drive.mjs key    <match> <selector> <k> [n]  focus and press a key n times
+//   drive.mjs drag   <match> <selector> <dx> <dy>  press, move and release a real mouse
+//   drive.mjs wheel  <match> <selector> <dy> [n]   scroll a real wheel over an element
+//   drive.mjs download <match> <selector> [ms]   click and print the saved file and its size
 //   drive.mjs close                          ask the browser to exit
 //
 // The port comes from COMPRESS_CDP_PORT, or --port as the first argument.
@@ -145,6 +148,24 @@ const KEYS = {
     Tab: 9,
     Escape: 27,
 };
+
+// Scrolls the element into view and returns its centre in viewport pixels, the
+// coordinates Input.dispatchMouseEvent expects.
+async function centre(send, selector) {
+    await send('Page.bringToFront').catch(() => {});
+    const result = await send('Runtime.evaluate', {
+        expression: `(() => { const el = ${pick(selector)};
+            el.scrollIntoView({ block: 'center', inline: 'center' });
+            const r = el.getBoundingClientRect();
+            return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })()`,
+        returnByValue: true,
+    });
+    if (result.exceptionDetails)
+        fail(
+            result.exceptionDetails.exception?.description ?? 'Selector threw.',
+        );
+    return result.result.value;
+}
 
 const [command, ...rest] = argv;
 
@@ -358,8 +379,90 @@ if (command === 'targets') {
         }
     });
     process.stdout.write(`${key} x${count}\n`);
+} else if (command === 'drag') {
+    const [match, selector, dx, dy] = rest;
+    if (!match || !selector || dx === undefined || dy === undefined)
+        fail('Usage: drive.mjs drag <match> <selector> <dx> <dy>');
+    const target = await findTarget(match);
+    await session(target, async (send) => {
+        const start = await centre(send, selector);
+        const mouse = (type, x, y, buttons) =>
+            send('Input.dispatchMouseEvent', {
+                type,
+                x,
+                y,
+                button: 'left',
+                buttons,
+                clickCount: 1,
+            });
+        // Pointer handlers read movement between events, so one jump to the end
+        // would skip whatever they do along the way. Move in steps instead.
+        const steps = 10;
+        await mouse('mousePressed', start.x, start.y, 1);
+        for (let i = 1; i <= steps; i++)
+            await mouse(
+                'mouseMoved',
+                start.x + (Number(dx) * i) / steps,
+                start.y + (Number(dy) * i) / steps,
+                1,
+            );
+        await mouse(
+            'mouseReleased',
+            start.x + Number(dx),
+            start.y + Number(dy),
+            0,
+        );
+    });
+    process.stdout.write(`dragged ${selector} by ${dx},${dy}\n`);
+} else if (command === 'wheel') {
+    const [match, selector, dy, count = '1'] = rest;
+    if (!match || !selector || dy === undefined)
+        fail('Usage: drive.mjs wheel <match> <selector> <deltaY> [count]');
+    const target = await findTarget(match);
+    await session(target, async (send) => {
+        const { x, y } = await centre(send, selector);
+        for (let i = 0; i < Number(count); i++)
+            await send('Input.dispatchMouseEvent', {
+                type: 'mouseWheel',
+                x,
+                y,
+                deltaX: 0,
+                deltaY: Number(dy),
+            });
+    });
+    process.stdout.write(`wheel ${dy} x${count}\n`);
+} else if (command === 'download') {
+    const [match, selector, timeout = '20000'] = rest;
+    if (!match || !selector)
+        fail('Usage: drive.mjs download <match> <selector> [timeoutMs]');
+    const dir = process.env.COMPRESS_VERIFY_DOWNLOADS;
+    if (!dir) fail('Set COMPRESS_VERIFY_DOWNLOADS; source session.env first.');
+    const { readdir, stat } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const before = new Set(await readdir(dir));
+    await evaluate(match, `${pick(selector)}.click()`);
+    // Chromium writes <name>.crdownload and renames it when done, so a file
+    // counts once it is new, not partial, and its size has stopped moving.
+    const deadline = Date.now() + Number(timeout);
+    let last;
+    for (;;) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const names = await readdir(dir);
+        const fresh = names.filter((name) => !before.has(name));
+        const done = fresh.find((name) => !name.endsWith('.crdownload'));
+        if (done && !fresh.some((name) => name.endsWith('.crdownload'))) {
+            const { size } = await stat(join(dir, done));
+            if (last?.name === done && last.size === size) {
+                process.stdout.write(`${join(dir, done)}\t${size}\n`);
+                break;
+            }
+            last = { name: done, size };
+        }
+        if (Date.now() > deadline)
+            fail(`No finished download in ${dir} after ${timeout}ms.`);
+    }
 } else {
     fail(
-        'Usage: drive.mjs targets|open|eval|text|shot|wait|upload|click|fill|key|close ...',
+        'Usage: drive.mjs targets|open|eval|text|shot|wait|upload|click|fill|key|drag|wheel|download|close ...',
     );
 }

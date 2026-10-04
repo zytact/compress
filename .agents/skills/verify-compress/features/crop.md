@@ -35,6 +35,10 @@ sleep 2
 # zoom in, then pan right with the keyboard
 node $D key "$U" '[aria-label=Zoom]' ArrowRight 50
 node $D key "$U" 'main [role=group]' ArrowRight 5
+# the same with a real mouse: drag the zoom thumb, wheel over the stage, drag to pan
+node $D drag  "$U" '[aria-label=Zoom]' 60 0
+node $D wheel "$U" 'main [role=group]' -100 2
+node $D drag  "$U" 'main [role=group]' -120 0
 sleep 2
 node $D eval "$U" 'document.querySelector("img[alt=Compressed]")?.naturalWidth'
 ```
