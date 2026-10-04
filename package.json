@@ -12,6 +12,8 @@
         "preview": "vite preview",
         "test": "vitest run",
         "lint": "eslint",
+        "typecheck": "tsc --noEmit",
+        "validate": "pnpm lint && prettier --check . && pnpm typecheck && pnpm test && pnpm build",
         "format": "prettier --write .",
         "check": "prettier --write . && eslint --fix",
         "prepare": "husky"
